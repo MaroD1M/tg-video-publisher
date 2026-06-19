@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+
+# Frontend
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Build artifacts
+static/
+
+# Database
+config/app.db
+config/bot-api.env
+config/bot-api-data/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+*.log

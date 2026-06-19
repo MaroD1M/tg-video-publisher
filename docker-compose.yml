@@ -1,0 +1,24 @@
+services:
+  tg-video-publisher:
+    image: ghcr.io/marod1m/tg-video-publisher:latest
+    container_name: tg-video-publisher
+    restart: unless-stopped
+    network_mode: bridge
+    cap_add:
+      - SYS_PTRACE
+    ports:
+      - "8080:8080"
+    volumes:
+      # 修改下面前 4 个路径为你的实际路径即可
+      - /volume1/videos:/data/videos:ro          # 视频源目录（只读）
+      - /volume1/docker/tg-publisher/output:/data/output
+      - /volume1/docker/tg-publisher/thumbnails:/data/thumbnails
+      - /volume1/docker/tg-publisher/config:/app/config
+    environment:
+      TZ: Asia/Shanghai
+      # 国内服务器：取消注释，填写你的Clash HTTP代理地址（proxychains接管全部出站流量）
+      # BOT_API_PROXY=http://192.168.1.100:7890               # 无认证
+      # BOT_API_PROXY=http://user:pass@192.168.1.100:7890      # 有认证
+    dns:
+      - 223.5.5.5
+      - 119.29.29.29
