@@ -89,6 +89,26 @@ const stats = computed(() => {
 })
 
 let wsMounted = false
+let elapsedTimer: number | undefined
+
+function startElapsedTimer() {
+  if (elapsedTimer) return
+  elapsedTimer = window.setInterval(() => {
+    for (const t of tasks.value) {
+      if (t.status === 'running' || t.status === 'uploading') {
+        t.elapsed_sec = (t.elapsed_sec || 0) + 1
+      }
+    }
+  }, 1000)
+}
+
+function stopElapsedTimer() {
+  const active = tasks.value.some(t => t.status === 'running' || t.status === 'uploading')
+  if (!active && elapsedTimer) {
+    clearInterval(elapsedTimer)
+    elapsedTimer = undefined
+  }
+}
 
 function connectWS() {
   ws.value?.close()
@@ -106,19 +126,23 @@ function connectWS() {
         t.eta_sec = msg.eta_sec || 0
         t.thumbnail_id = msg.thumbnail_id || t.thumbnail_id
       }
+      startElapsedTimer()
     } else if (msg.type === 'publish_done') {
       const t = tasks.value.find(j => j.id === msg.task_id)
       if (t) { t.status = 'done'; t.progress = 100 }
+      stopElapsedTimer()
       dedupedToast('success', msg.video_name, `发布成功: ${msg.video_name}`)
       load()
     } else if (msg.type === 'publish_error') {
       const t = tasks.value.find(j => j.id === msg.task_id)
       if (t) { t.status = 'failed'; t.error_log = msg.error || '' }
+      stopElapsedTimer()
       dedupedToast('error', msg.video_name, `发布失败: ${msg.video_name}`)
       load()
     } else if (msg.type === 'publish_cancelled') {
       const t = tasks.value.find(j => j.id === msg.task_id)
       if (t) t.status = 'cancelled'
+      stopElapsedTimer()
       load()
     }
   }
@@ -266,6 +290,7 @@ onMounted(() => {
 onUnmounted(() => {
   wsMounted = false
   if (reconnectTimer) clearTimeout(reconnectTimer)
+  if (elapsedTimer) clearInterval(elapsedTimer)
   ws.value?.close()
 })
 </script>

@@ -404,7 +404,6 @@ async function load() {
                   <n-button size="tiny" @click.stop="doPause(job.id)">暂停</n-button>
                   <n-popconfirm @positive-click="() => doCancel(job.id)">
                     <template #trigger><n-button size="tiny" @click.stop>取消</n-button></template>
-                    <template #action><n-button size="tiny" type="primary" @click="() => doCancel(job.id)">确定</n-button><n-button size="tiny" style="margin-left:8px">取消</n-button></template>
                     确定取消？
                   </n-popconfirm>
                 </template>
@@ -412,19 +411,16 @@ async function load() {
                   <n-button size="tiny" type="primary" @click.stop="doResume(job.id)">继续</n-button>
                   <n-popconfirm @positive-click="() => doCancel(job.id)">
                     <template #trigger><n-button size="tiny" @click.stop>取消</n-button></template>
-                    <template #action><n-button size="tiny" type="primary" @click="() => doCancel(job.id)">确定</n-button><n-button size="tiny" style="margin-left:8px">取消</n-button></template>
                     确定取消？
                   </n-popconfirm>
                   <n-popconfirm @positive-click="() => doDeleteJob(job.id)">
                     <template #trigger><n-button size="tiny" type="error" @click.stop>删除</n-button></template>
-                    <template #action><n-button size="tiny" type="error" @click="() => doDeleteJob(job.id)">确定</n-button><n-button size="tiny" style="margin-left:8px">取消</n-button></template>
                     确定删除？
                   </n-popconfirm>
                 </template>
                 <template v-if="job.status === 'queued'">
                   <n-popconfirm @positive-click="() => doDeleteJob(job.id)">
                     <template #trigger><n-button size="tiny" type="error" @click.stop>删除</n-button></template>
-                    <template #action><n-button size="tiny" type="error" @click="() => doDeleteJob(job.id)">确定</n-button><n-button size="tiny" style="margin-left:8px">取消</n-button></template>
                     确定删除？
                   </n-popconfirm>
                 </template>
@@ -487,7 +483,6 @@ async function load() {
                 <n-button v-if="(job.status === 'done' || job.status === 'skipped') && !job.thumbnail_id" size="tiny" @click.stop="doGenerateThumb(job.video_id)">🖼 生成缩略图</n-button>
                 <n-popconfirm @positive-click="() => doDeleteJob(job.id)">
                   <template #trigger><n-button size="tiny" type="error" @click.stop>删除</n-button></template>
-                  <template #action><n-button size="tiny" type="error" @click="() => doDeleteJob(job.id)">确定</n-button><n-button size="tiny" style="margin-left:8px">取消</n-button></template>
                   确定删除？
                 </n-popconfirm>
               </div>
@@ -515,12 +510,10 @@ async function load() {
       <n-space v-if="showCompleted" style="margin-top:8px" :size="6">
         <n-popconfirm @positive-click="() => doBatchDelete('done')">
           <template #trigger><n-button size="tiny">删除已完成</n-button></template>
-          <template #action><n-button size="tiny" type="primary" @click="() => doBatchDelete('done')">确定</n-button><n-button size="tiny" style="margin-left:8px">取消</n-button></template>
           确定删除所有已完成？
         </n-popconfirm>
         <n-popconfirm @positive-click="() => doBatchDelete('')">
           <template #trigger><n-button size="tiny" type="error">删除全部历史</n-button></template>
-          <template #action><n-button size="tiny" type="error" @click="() => doBatchDelete('')">确定</n-button><n-button size="tiny" style="margin-left:8px">取消</n-button></template>
           确定删除所有历史任务？
         </n-popconfirm>
       </n-space>
