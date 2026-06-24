@@ -17,6 +17,9 @@ const collapsed = ref(false)
 const showSetup = computed(() => route.name === 'setup' || route.name === 'login')
 const stats = ref({ compress_running: 0, compress_queued: 0, queued: 0, publish_active: 0 })
 let statsTimer: number | undefined
+let ws: WebSocket | null = null
+let wsReconnectTimer: number | undefined
+let wsReconnectAttempts = 0
 
 function renderIcon(icon: Component) {
   return () => h(NIcon, null, { default: () => h(icon) })
@@ -72,13 +75,32 @@ async function pollStats() {
   } catch {}
 }
 
+function connectWS() {
+  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
+  const token = localStorage.getItem('access_token')
+  ws = new WebSocket(`${protocol}//${location.host}/ws/compress?token=${token || ''}`)
+  ws.onmessage = () => {
+    pollStats()
+  }
+  ws.onclose = () => {
+    const delay = Math.min((wsReconnectAttempts || 1) * 5000, 60000)
+    wsReconnectAttempts = (wsReconnectAttempts || 1) + 1
+    wsReconnectTimer = window.setTimeout(connectWS, delay)
+  }
+  ws.onerror = () => { ws?.close() }
+  ws.onopen = () => { wsReconnectAttempts = 0 }
+}
+
 onMounted(() => {
   pollStats()
+  connectWS()
   statsTimer = window.setInterval(pollStats, 30000)
 })
 
 onUnmounted(() => {
   if (statsTimer) clearInterval(statsTimer)
+  if (wsReconnectTimer) clearTimeout(wsReconnectTimer)
+  ws?.close()
 })
 </script>
 

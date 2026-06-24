@@ -255,8 +255,8 @@ const hasActiveTasks = computed(() => runningJobs.value.length > 0 || publishTas
           <n-button size="small" :loading="scanning" @click="doScan">
             <template #icon><n-icon><ScanOutline /></n-icon></template>扫描
           </n-button>
+          <n-input v-model:value="searchText" size="small" placeholder="搜索文件名..." clearable style="width: 200px" />
         </n-space>
-        <n-input v-model:value="searchText" size="small" placeholder="搜索文件名..." clearable style="max-width: 260px" />
       </n-space>
     </n-card>
 
