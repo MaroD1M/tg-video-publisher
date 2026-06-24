@@ -242,14 +242,6 @@ async function doPause(jobId: number) {
   try { await pauseJob(jobId); message.success('已暂停') } catch { message.error('暂停失败') }
 }
 
-async function doResume(jobId: number) {
-  try { await resumeJob(jobId); message.success('已恢复') } catch { message.error('恢复失败') }
-}
-
-async function doRetry(jobId: number) {
-  try { await retryCompressJob(jobId); message.success('已重试'); load() } catch { message.error('重试失败') }
-}
-
 async function doGenerateThumb(videoId: number) {
   try {
     const r = await generateThumbnail(videoId)
