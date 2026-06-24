@@ -93,6 +93,7 @@ interface Job {
   speed: number
   fps: number
   stderr: string
+  error_log: string
   thumbnail_id: number | null
   skip_reason: string
   phase: string
@@ -128,8 +129,8 @@ function connectWS() {
         preset: msg.preset || 'balanced', status: 'running', progress: 0,
         output_size_bytes: 0, original_size_bytes: msg.original_size || 0,
         eta_sec: msg.eta_sec || 0, elapsed_sec: 0, speed: 0, fps: 0,
-        stderr: '', thumbnail_id: msg.thumbnail_id || null, skip_reason: '',
-        phase: msg.phase || 'encoding',
+        stderr: '', error_log: '', thumbnail_id: msg.thumbnail_id || null, skip_reason: '',
+        phase: msg.phase || 'encoding', step_log: [],
       })
     } else if (msg.type === 'progress') {
       const job = jobs.value.find((j) => j.id === msg.job_id)
