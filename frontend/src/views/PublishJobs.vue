@@ -97,6 +97,9 @@ function startElapsedTimer() {
     for (const t of tasks.value) {
       if (t.status === 'running' || t.status === 'uploading') {
         t.elapsed_sec = (t.elapsed_sec || 0) + 1
+        if (t.eta_sec && t.eta_sec > 0) {
+          t.progress = Math.min(95, Math.round(10 + (t.elapsed_sec / (t.elapsed_sec + t.eta_sec)) * 90))
+        }
       }
     }
   }, 1000)

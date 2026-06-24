@@ -137,11 +137,12 @@ async def _execute_publish(task_id: int):
                     video_tpl = sched.video_caption_template or ""
 
         elapsed = time.time() - thumb_start
+        est_upload_sec = round(vsize / (2 * 1024 * 1024)) if vsize > 0 else 30
         step_logs.append({"step":"prepare","elapsed":round(elapsed,1),"result":"done"})
         await broadcast_publish({
             "type": "publish_progress", "task_id": task_id, "video_id": task.video_id,
             "video_name": video_name, "channel_name": channel_name,
-            "step": "sending", "progress": 10, "elapsed_sec": round(elapsed), "eta_sec": 0,
+            "step": "sending", "progress": 10, "elapsed_sec": round(elapsed), "eta_sec": est_upload_sec,
             "thumbnail_id": thumb_id, "step_logs": step_logs,
         })
 

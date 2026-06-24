@@ -2,6 +2,7 @@ import datetime
 import asyncio
 import json
 import time
+from pathlib import Path
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -597,6 +598,17 @@ async def delete_compress_job(job_id: int, db: AsyncSession = Depends(get_db)):
     if video and video.status in (VideoStatus.compressing, VideoStatus.compressed, VideoStatus.skipped, VideoStatus.failed):
         video.status = VideoStatus.pending
         video.error_msg = None
+    # Clean up associated thumbnail files
+    thumb_rows = (await db.execute(
+        select(Thumbnail).where(Thumbnail.video_id == job.video_id)
+    )).scalars().all()
+    for t in thumb_rows:
+        try:
+            if t.filepath and Path(t.filepath).exists():
+                Path(t.filepath).unlink()
+        except Exception:
+            pass
+        await db.delete(t)
     await db.delete(job)
     await db.commit()
     return {"ok": True}
