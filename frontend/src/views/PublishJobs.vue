@@ -63,7 +63,7 @@ interface PublishTask {
   id: number; video_id: number | null; video_name: string; channel_name: string
   status: string; progress: number; elapsed_sec: number; eta_sec: number
   compression_ratio: number | null; error_log: string; thumbnail_id: number | null
-  created_at: string; is_paused: boolean; step_log: { step: string; elapsed: number; result: string; error?: string }[]
+  created_at: string; is_paused: boolean;   step_log: { step: string; elapsed: number; result: string; error?: string; speed_kbs?: number }[]
 }
 
 const tasks = ref<PublishTask[]>([])
