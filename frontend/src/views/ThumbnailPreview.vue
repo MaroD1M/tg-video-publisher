@@ -62,7 +62,6 @@ function formatSize(bytes: number) {
   return bytes < 1_000_000 ? (bytes / 1_000).toFixed(1) + ' KB' : (bytes / 1_000_000).toFixed(1) + ' MB'
 }
 </script>
-</script>
 
 <template>
   <PageContainer>
