@@ -65,7 +65,9 @@ async def publish_video(
         from app.database.models import TargetChat
         from sqlalchemy import select
         async with async_session() as db:
-            tc = await db.get(TargetChat, channel_id)
+            tc = (await db.execute(
+                select(TargetChat).where(TargetChat.chat_id == channel_id)
+            )).scalar_one_or_none()
             if tc and tc.linked_chat_id:
                 discussion_chat_id = tc.linked_chat_id
     except Exception:
@@ -82,7 +84,7 @@ async def publish_video(
     except Exception as e:
         return {"success": False, "error": f"Thumbnail send failed: {e}"}
 
-    # Send video — to discussion group if available, otherwise reply in channel
+    # Send video — to discussion group thread if available, otherwise reply in channel
     try:
         with open(video_path, "rb") as f:
             kwargs = dict(
@@ -93,8 +95,13 @@ async def publish_video(
                 height=height if height else None,
             )
             if discussion_chat_id:
-                kwargs["reply_to_message_id"] = thumb_msg_id
-                video_msg = await bot.send_video(chat_id=discussion_chat_id, **kwargs)
+                try:
+                    kwargs["message_thread_id"] = thumb_msg_id
+                    video_msg = await bot.send_video(chat_id=discussion_chat_id, **kwargs)
+                except Exception:
+                    kwargs.pop("message_thread_id", None)
+                    kwargs["reply_to_message_id"] = thumb_msg_id
+                    video_msg = await bot.send_video(chat_id=channel_id, **kwargs)
             else:
                 kwargs["reply_to_message_id"] = thumb_msg_id
                 video_msg = await bot.send_video(chat_id=channel_id, **kwargs)

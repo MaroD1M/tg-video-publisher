@@ -9,7 +9,7 @@ _bot_ready: bool = False
 
 _bot_request = HTTPXRequest(
     connect_timeout=10,
-    write_timeout=120,
+    write_timeout=3600,
     read_timeout=7200,
     connection_pool_size=20,
     pool_timeout=15,
@@ -53,7 +53,7 @@ async def reset_bot():
     _bot_ready = False
 
 
-async def discover_chats() -> list[dict]:
+async def discover_chats(refresh_names: bool = False) -> list[dict]:
     """Return all known chats: DB-stored + recently discovered."""
     from app.database.connection import async_session
     from app.database.models import TargetChat
@@ -76,9 +76,17 @@ async def discover_chats() -> list[dict]:
             })
             seen.add(r.chat_id)
 
-    # Second: attempt recent update discovery
+    # Second: attempt recent update discovery + optionally refresh existing names
     bot = await get_bot()
     if bot:
+        if refresh_names:
+            for chat_info in chats:
+                try:
+                    full = await bot.get_chat(chat_info["chat_id"])
+                    await _save_chat(_chat_to_dict(full))
+                except TelegramError:
+                    pass
+
         try:
             updates = await bot.get_updates(limit=100, timeout=5)
             for u in updates:

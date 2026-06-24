@@ -100,7 +100,12 @@ async def generate_thumbnail(
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
-    _, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
+    try:
+        _, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
+    except asyncio.TimeoutError:
+        proc.kill()
+        await proc.wait()
+        return {"success": False, "error": "Thumbnail generation timed out"}
 
     output_file = Path(output_path)
     if proc.returncode != 0 or not output_file.exists():

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { NLayoutFooter, NButton, NTooltip } from 'naive-ui'
+import { NLayoutFooter, NTooltip } from 'naive-ui'
 import StatusDot from '@/components/shared/StatusDot.vue'
 import { fetchStats, fetchVersion, checkVersion, fetchDiskUsage } from '@/api/client'
 

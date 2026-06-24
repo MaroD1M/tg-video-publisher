@@ -6,7 +6,7 @@ import {
   NPopconfirm, NImage, NGrid, NGi, NStatistic, NSelect, NSlider, NIcon, useMessage
 } from 'naive-ui'
 import { TimeOutline } from '@vicons/ionicons5'
-import { fetchCompressJobs, cancelCompressJob, pauseJob, resumeJob, retryCompressJob, getThumbnailImage, publishNow, fetchChats, deleteCompressJob, batchDeleteCompress, batchConfigCompress, submitCompress, updateCompressSettings } from '@/api/client'
+import { fetchCompressJobs, cancelCompressJob, pauseJob, resumeJob, retryCompressJob, getThumbnailImage, publishNow, fetchChats, deleteCompressJob, batchDeleteCompress, submitCompress, updateCompressSettings } from '@/api/client'
 import api from '@/api/client'
 import PageHeader from '@/components/shared/PageHeader.vue'
 import PageContainer from '@/components/shared/PageContainer.vue'
@@ -89,6 +89,7 @@ interface Job {
   progress: number
   output_size_bytes: number
   original_size_bytes: number
+  target_size_mb: number
   eta_sec: number
   elapsed_sec: number
   speed: number
@@ -98,6 +99,8 @@ interface Job {
   thumbnail_id: number | null
   skip_reason: string
   phase: string
+  finished_at: string
+  is_published: boolean
   step_log: { step: string; elapsed: number; result: string; error?: string; speed?: number; output_gb?: number; thumb_id?: number }[]
 }
 
@@ -243,14 +246,19 @@ function initRetryConfig(job: Job) {
   }
 }
 
-async function doRetryWithConfig(jobId: number) {
-  initRetryConfig({ id: jobId, preset: 'balanced' } as Job)
-  const cfg = retryConfig.value[jobId]
-  if (cfg) {
-    await updateCompressSettings(jobId, cfg)
-    delete retryConfig.value[jobId]
+async function doRetryWithConfig(job: Job) {
+  if (!retryConfig.value[job.id]) {
+    retryConfig.value[job.id] = {
+      preset: job.preset || defaultPreset.value,
+      target_size_mb: job.target_size_mb || 500,
+    }
   }
-  await doRetry(jobId)
+  const cfg = retryConfig.value[job.id]
+  if (cfg) {
+    await updateCompressSettings(job.id, cfg)
+    delete retryConfig.value[job.id]
+  }
+  await doRetry(job.id)
 }
 
 async function doPublish(job: Job) {
@@ -440,9 +448,11 @@ async function load() {
               </div>
               <div style="display: flex; gap: 6px; align-items: center; flex-shrink: 0">
                 <n-tag :type="job.status === 'done' ? 'success' : job.status === 'failed' ? 'error' : job.status === 'skipped' ? 'info' : 'default'" size="small" :bordered="false" round>{{ statusLabel(job.status) }}</n-tag>
+                <n-tag v-if="job.is_published" type="success" size="small" :bordered="false" round>📤 已发布</n-tag>
               </div>
             </div>
             <div style="font-size: 12px;">
+              <n-text v-if="job.finished_at" depth="3" style="font-size:10px;display:block;margin-bottom:2px">完成的于 {{ new Date(job.finished_at).toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit'}) }}</n-text>
               <n-text v-if="job.status === 'done'" style="color: var(--color-green)">
                 {{ formatSize(job.original_size_bytes) }} → {{ formatSize(job.output_size_bytes) }}
               </n-text>
@@ -453,7 +463,7 @@ async function load() {
                 <n-button size="tiny" @click.stop="toggleExpand(job.id)">{{ expandedJobId === job.id ? '收起' : '详情' }}</n-button>
                 <n-button v-if="job.status === 'done' || job.status === 'skipped'" size="tiny" @click.stop="doPublish(job)">发布</n-button>
                 <n-button v-if="job.status === 'failed' || job.status === 'cancelled'" size="tiny" @click.stop="doPublish(job)">发布</n-button>
-                <n-button v-if="job.status === 'failed' || job.status === 'skipped' || job.status === 'cancelled'" size="tiny" type="primary" @click.stop="doRetryWithConfig(job.id); initRetryConfig(job)">重试</n-button>
+                <n-button v-if="job.status === 'failed' || job.status === 'skipped' || job.status === 'cancelled'" size="tiny" type="primary" @click.stop="doRetryWithConfig(job)">重试</n-button>
                 <n-popconfirm @positive-click="() => doDeleteJob(job.id)">
                   <template #trigger><n-button size="tiny" type="error" @click.stop>删除</n-button></template>
                   <template #action><n-button size="tiny" type="error" @click="() => doDeleteJob(job.id)">确定</n-button><n-button size="tiny" style="margin-left:8px">取消</n-button></template>

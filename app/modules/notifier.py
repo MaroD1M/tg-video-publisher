@@ -43,9 +43,8 @@ async def notify_admin(message: str, event_type: str = "", variables: dict | Non
     # Render template with variables
     if variables:
         try:
-            from string import Template
-            tpl = Template(template)
-            template = tpl.safe_substitute(**variables)
+            for key, value in variables.items():
+                template = template.replace(f"{{{key}}}", str(value) if value is not None else "")
         except Exception:
             pass
 

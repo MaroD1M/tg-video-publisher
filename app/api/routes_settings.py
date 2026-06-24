@@ -255,7 +255,7 @@ async def verify_chat(chat_id: int = Query(...)):
 @router.post("/chats/refresh")
 async def refresh_chats():
     from app.bot.client import discover_chats
-    chats = await discover_chats()
+    chats = await discover_chats(refresh_names=True)
     return {"items": chats}
 
 

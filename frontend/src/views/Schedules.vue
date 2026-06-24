@@ -74,7 +74,6 @@ function onCronPreset(val: string) {
   if (val) {
     form.value.cron_expr = val
     loadCronPreview()
-    nextTick(() => { cronPreset.value = '' })
   }
 }
 
@@ -102,6 +101,7 @@ const columns = [
       default: () => [
         h(NButton, { size: 'tiny', onClick: () => openQueue(r) }, { default: () => '队列' }),
         h(NButton, { size: 'tiny', onClick: () => edit(r) }, { default: () => '编辑' }),
+        h(NButton, { size: 'tiny', onClick: () => doToggle(r) }, { default: () => r.enabled ? '停用' : '启用' }),
         h(NButton, { size: 'tiny', onClick: () => doTrigger(r.id) }, { default: () => '执行' }),
         h(NPopconfirm, { onPositiveClick: () => doDelete(r.id) },
           { trigger: () => h(NButton, { size: 'tiny', type: 'error' }, { default: () => '删除' }), default: () => '确定删除？' }
@@ -177,6 +177,14 @@ async function doDelete(id: number) {
     message.success('已删除')
     await load()
   } catch (e: any) { message.error('删除失败: ' + (e?.response?.data?.detail || e?.message || '')) }
+}
+
+async function doToggle(schedule: any) {
+  try {
+    await updateSchedule(schedule.id, { enabled: !schedule.enabled })
+    message.success(schedule.enabled ? '已停用' : '已启用')
+    await load()
+  } catch { message.error('操作失败') }
 }
 
 async function doTrigger(id: number) {

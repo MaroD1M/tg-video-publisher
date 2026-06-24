@@ -67,8 +67,12 @@ onMounted(load)
       <div v-for="f in data.output.orphans" :key="f.path" style="display:flex;align-items:center;gap:12px;padding:6px 0;border-bottom:1px solid var(--border-subtle);font-size:13px">
         <n-text style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ f.name }}</n-text>
         <n-text depth="3">{{ formatSize(f.size) }}</n-text>
-        <n-popconfirm :on-positive-click="() => del([f.path])" positive-text="确定" negative-text="取消"><n-button size="tiny" type="error">删除</n-button>确定删除？</n-popconfirm>
+        <n-popconfirm :on-positive-click="() => del([f.path])">
+          <template #trigger><n-button size="tiny" type="error">删除</n-button></template>
+          确定删除？
+        </n-popconfirm>
       </div>
+      <n-button v-if="data?.output.orphans.length > 1" size="tiny" type="error" style="margin-top:8px" @click="del(data.output.orphans.map((f:any) => f.path))">删除全部 ({{ data.output.orphans.length }})</n-button>
     </n-card>
 
     <!-- Published outputs -->
@@ -77,7 +81,10 @@ onMounted(load)
       <div v-for="f in data.output.published.slice(0, 10)" :key="f.path" style="display:flex;align-items:center;gap:12px;padding:6px 0;border-bottom:1px solid var(--border-subtle);font-size:13px">
         <n-text style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ f.name }}</n-text>
         <n-text depth="3">{{ formatSize(f.size) }}</n-text>
-        <n-popconfirm :on-positive-click="() => del([f.path])" positive-text="确定" negative-text="取消"><n-button size="tiny" type="warning">删除</n-button>确定删除？</n-popconfirm>
+        <n-popconfirm :on-positive-click="() => del([f.path])">
+          <template #trigger><n-button size="tiny" type="warning">删除</n-button></template>
+          确定删除？
+        </n-popconfirm>
       </div>
       <n-text v-if="data.output.published.length > 10" depth="3" style="font-size:11px;display:block;margin-top:4px">...还有 {{ data.output.published.length - 10 }} 个文件</n-text>
       <n-button size="tiny" type="error" style="margin-top:8px" @click="delPublished('output')">删除全部已发布 ({{ data.output.published.length }})</n-button>
@@ -90,8 +97,12 @@ onMounted(load)
       <div v-for="f in data.thumbnails.orphans" :key="f.path" style="display:flex;align-items:center;gap:12px;padding:6px 0;border-bottom:1px solid var(--border-subtle);font-size:13px">
         <n-text style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ f.name }}</n-text>
         <n-text depth="3">{{ formatSize(f.size) }}</n-text>
-        <n-popconfirm :on-positive-click="() => del([f.path])" positive-text="确定" negative-text="取消"><n-button size="tiny" type="error">删除</n-button>确定删除？</n-popconfirm>
+        <n-popconfirm :on-positive-click="() => del([f.path])">
+          <template #trigger><n-button size="tiny" type="error">删除</n-button></template>
+          确定删除？
+        </n-popconfirm>
       </div>
+      <n-button v-if="data?.thumbnails.orphans.length > 1" size="tiny" type="error" style="margin-top:8px" @click="del(data.thumbnails.orphans.map((f:any) => f.path))">删除全部 ({{ data.thumbnails.orphans.length }})</n-button>
     </n-card>
 
     <!-- Published thumbnails -->
@@ -100,7 +111,10 @@ onMounted(load)
       <div v-for="f in data.thumbnails.published.slice(0, 10)" :key="f.path" style="display:flex;align-items:center;gap:12px;padding:6px 0;border-bottom:1px solid var(--border-subtle);font-size:13px">
         <n-text style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ f.name }}</n-text>
         <n-text depth="3">{{ formatSize(f.size) }}</n-text>
-        <n-popconfirm :on-positive-click="() => del([f.path])" positive-text="确定" negative-text="取消"><n-button size="tiny" type="warning">删除</n-button>确定删除？</n-popconfirm>
+        <n-popconfirm :on-positive-click="() => del([f.path])">
+          <template #trigger><n-button size="tiny" type="warning">删除</n-button></template>
+          确定删除？
+        </n-popconfirm>
       </div>
       <n-text v-if="data.thumbnails.published.length > 10" depth="3" style="font-size:11px;display:block;margin-top:4px">...还有 {{ data.thumbnails.published.length - 10 }} 个文件</n-text>
       <n-button size="tiny" type="error" style="margin-top:8px" @click="delPublished('thumbnails')">删除全部已发布 ({{ data.thumbnails.published.length }})</n-button>
@@ -109,7 +123,10 @@ onMounted(load)
     <!-- Temp files -->
     <n-card v-if="data?.tmp.count" size="small" title="🗑 临时文件 (compress_workers)" style="margin-bottom: 16px">
       <n-text depth="3" style="font-size:12px;display:block;margin-bottom:8px">{{ data.tmp.count }} 个文件，占 {{ formatSize(data.tmp.size) }}</n-text>
-      <n-popconfirm :on-positive-click="cleanTmp" positive-text="确定" negative-text="取消"><n-button size="small" type="warning">一键清理</n-button>确定清理所有临时文件？</n-popconfirm>
+      <n-popconfirm :on-positive-click="cleanTmp">
+        <template #trigger><n-button size="small" type="warning">一键清理</n-button></template>
+        确定清理所有临时文件？
+      </n-popconfirm>
     </n-card>
     <!-- Bot cache -->
     <n-card v-if="data?.bot_cache.files.length" size="small" title="🗑 Bot API 缓存 (bot-api-data)" style="margin-bottom: 16px">
@@ -117,9 +134,16 @@ onMounted(load)
       <div v-for="f in data.bot_cache.files.slice(0, 15)" :key="f.path" style="display:flex;align-items:center;gap:12px;padding:3px 0;border-bottom:1px solid var(--border-subtle);font-size:12px;font-family:monospace">
         <n-text style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ f.name }}</n-text>
         <n-text depth="3">{{ formatSize(f.size) }}</n-text>
+        <n-popconfirm :on-positive-click="() => del([f.path])">
+          <template #trigger><n-button size="tiny" type="error">删除</n-button></template>
+          确定删除？
+        </n-popconfirm>
       </div>
       <n-text v-if="data.bot_cache.files.length > 15" depth="3" style="font-size:11px;display:block;margin-top:4px">...还有 {{ data.bot_cache.files.length - 15 }} 个文件</n-text>
-      <n-popconfirm :on-positive-click="cleanBotCache" positive-text="确定" negative-text="取消" style="margin-top:8px"><n-button size="small" type="error">清理全部缓存</n-button>确定清理 Bot API 缓存？此操作可能导致 Bot API 重新登录</n-popconfirm>
+      <n-popconfirm :on-positive-click="cleanBotCache" style="margin-top:8px">
+        <template #trigger><n-button size="small" type="error">清理全部缓存</n-button></template>
+        确定清理 Bot API 缓存？此操作可能导致 Bot API 重新登录
+      </n-popconfirm>
     </n-card>
   </PageContainer>
 </template>

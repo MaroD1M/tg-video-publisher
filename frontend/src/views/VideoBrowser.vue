@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, watch, h } from 'vue'
+import { ref, onMounted, onUnmounted, computed, h } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   NCard, NInput, NButton, NDataTable, NSpace,
   NTag, NText, NEmpty,
   NBreadcrumb, NBreadcrumbItem, NSpin, NProgress, NIcon,
-  NPopconfirm, NPopover, useMessage,
+  NPopconfirm, NPopover, NSelect, useMessage,
 } from 'naive-ui'
 import { ScanOutline } from '@vicons/ionicons5'
 import { fetchVideos, scanDirectory, deleteVideo, fetchChats, publishNow, cancelPublishTask, retryPublishTask } from '@/api/client'
@@ -19,7 +19,11 @@ const router = useRouter()
 function navigateTo(path: string) {
   const ids = Array.from(selectedIds.value)
   if (!ids.length) { message.warning('请先选择视频'); return }
-  router.push({ path, query: { ids: ids.join(',') } })
+  const query: Record<string, string> = { ids: ids.join(',') }
+  if (path === '/publish-tasks' && publishChannel.value) {
+    query.channel_id = String(publishChannel.value)
+  }
+  router.push({ path, query })
 }
 
 function unselectVideo(id: number) {
@@ -114,12 +118,10 @@ function formatDuration(sec: number): string {
 }
 
 async function doPublishOne(videoId: number) {
+  if (!publishChannel.value) { message.warning('请先在操作栏选择发布频道'); return }
   try {
-    const d = await fetchChats()
-    const ch = (d.items || [])[0]
-    if (!ch) { message.warning('无可用的频道，请先在系统设置中添加频道'); return }
     message.loading('加入发布队列...')
-    await publishNow(videoId, ch.chat_id)
+    await publishNow(videoId, publishChannel.value)
     message.success('已加入发布队列')
     loadVideos()
   } catch (e: any) {
@@ -138,20 +140,24 @@ const columns = [
   { title: '大小', key: 'size_bytes', width: 100, render: (r: any) => formatSize(r.size_bytes), sorter: true },
   { title: '时长', key: 'duration_sec', width: 90, render: (r: any) => formatDuration(r.duration_sec), sorter: true },
   { title: '分辨率', key: 'resolution', width: 110, render: (r: any) => r.width ? `${r.width}x${r.height}` : '-', sorter: true },
-  {
-    title: '状态', key: 'status', width: 80,
-    render: (r: any) => {
-      const map: Record<string, { type: any; label: string }> = {
-        pending: { type: 'default', label: '待处理' },
-        compressed: { type: 'success', label: '已压缩' },
-        skipped: { type: 'info', label: '已跳过' },
-        compressing: { type: 'warning', label: '压缩中' },
-        failed: { type: 'error', label: '失败' },
-      }
-      const s = map[r.status] || { type: 'default', label: r.status }
-      return h(NTag, { type: s.type, size: 'small', bordered: false }, { default: () => s.label })
+    {
+      title: '状态', key: 'status', width: 110,
+      render: (r: any) => {
+        const map: Record<string, { type: any; label: string }> = {
+          pending: { type: 'default', label: '待处理' },
+          compressed: { type: 'success', label: '已压缩' },
+          skipped: { type: 'info', label: '已跳过' },
+          compressing: { type: 'warning', label: '压缩中' },
+          failed: { type: 'error', label: '失败' },
+        }
+        const s = map[r.status] || { type: 'default', label: r.status }
+        const tags = [h(NTag, { type: s.type, size: 'small', bordered: false }, { default: () => s.label })]
+        if (r.is_published) {
+          tags.push(h(NTag, { type: 'success', size: 'small', bordered: false, style: 'margin-left:4px' }, { default: () => '📤 已发布' }))
+        }
+        return h(NSpace, { size: 'small' }, { default: () => tags })
+      },
     },
-  },
   {
     title: '操作', key: 'actions', width: 100,
     render: (r: any) => h(NSpace, { size: 'small' }, {
@@ -166,6 +172,7 @@ const columns = [
 ]
 
 const channels = ref<any[]>([])
+const publishChannel = ref<number | null>(null)
 
 async function loadChannels() {
   try { const d = await fetchChats(); channels.value = (d.items || []).map((c: any) => ({ ...c, _label: (c.alias || c.chat_name)?.length > 16 ? (c.alias || c.chat_name).slice(0,14)+'…' : (c.alias || c.chat_name) })) } catch {}
@@ -316,6 +323,8 @@ const hasActiveTasks = computed(() => runningJobs.value.length > 0 || publishTas
             <n-button size="tiny" type="error" block @click="selectedIds = new Set()" style="margin-top: 4px;">清空全部</n-button>
           </n-popover>
           <n-button size="tiny" :disabled="selectedCount === 0" @click="selectedIds = new Set()">清空</n-button>
+
+          <n-select v-model:value="publishChannel" size="tiny" style="width: 140px" :options="channels.map((c: any) => ({ label: (c.alias || c.chat_name || String(c.chat_id)).slice(0, 14) + ((c.alias || c.chat_name || '').length > 14 ? '…' : ''), value: c.chat_id }))" placeholder="选择频道" />
 
           <div style="margin-left: auto; display: flex; gap: 8px; align-items: center;">
             <n-button type="default" size="small" :disabled="selectedCount === 0" @click="navigateTo('/schedules')">📅 加入计划</n-button>

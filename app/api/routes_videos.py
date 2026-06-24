@@ -44,6 +44,18 @@ async def list_videos(
     rows = (await db.execute(q)).scalars().all()
 
     items = []
+    # Batch load published status
+    video_ids = [v.id for v in rows]
+    published_ids = set()
+    if video_ids:
+        pub_rows = (await db.execute(
+            select(PublishLog.video_id).where(
+                PublishLog.video_id.in_(video_ids),
+                PublishLog.success == True,
+            )
+        )).scalars().all()
+        published_ids = set(pub_rows)
+
     for v in rows:
         items.append({
             "id": v.id,
@@ -60,6 +72,7 @@ async def list_videos(
             "bitrate_kbps": v.bitrate_kbps,
             "status": v.status.value if v.status else "pending",
             "error_msg": v.error_msg,
+            "is_published": v.id in published_ids,
             "created_at": v.created_at.isoformat() if v.created_at else None,
         })
 
@@ -178,6 +191,7 @@ async def estimate_compressed_size(
     if size_bytes <= target_size_mb * 1_000_000:
         return {"estimated_mb": round(size_bytes / 1_000_000, 1), "original_mb": round(size_bytes / 1_000_000, 1), "will_skip": True}
 
+    proc = None
     try:
         import asyncio
         import json as _json
@@ -188,12 +202,7 @@ async def estimate_compressed_size(
             "-show_format", "-show_streams", str(video_path),
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
         )
-        try:
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=60)
-        except asyncio.TimeoutError:
-            proc.kill()
-            await proc.wait()
-            raise
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=60)
         info = _json.loads(stdout.decode("utf-8", errors="ignore"))
         fmt = info.get("format", {})
         duration = float(fmt.get("duration", 0))

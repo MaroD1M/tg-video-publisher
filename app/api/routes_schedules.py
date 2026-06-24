@@ -206,6 +206,7 @@ async def update_schedule_items(
         await db.execute(
             sql_update(ScheduleItem)
             .where(ScheduleItem.schedule_id == schedule_id)
+            .where(ScheduleItem.status != ItemStatus.published)
             .values(status=ItemStatus.skipped)
         )
         # Actually delete non-published

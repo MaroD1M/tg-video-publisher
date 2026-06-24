@@ -37,7 +37,7 @@ async def _publish_worker():
                 task = await db.get(PublishTask, task_data["task_id"])
                 if task and task.is_paused:
                     # Re-enqueue paused tasks instead of losing them
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(30)
                     await publish_queue.put(task_data)
                     continue  # Skip; will be re-checked on next deque
             await _execute_publish(task_data["task_id"])
@@ -179,13 +179,13 @@ async def _execute_publish(task_id: int):
                     task.step_log = json.dumps(step_logs)
                     await db.commit()
 
-                db.add(PublishLog(
-                    video_id=task.video_id, target_chat_id=channel_id,
-                    thumb_message_id=result.get("thumb_message_id"),
-                    video_message_id=result.get("video_message_id"),
-                    success=True,
-                ))
-                await db.commit()
+                    db.add(PublishLog(
+                        video_id=task.video_id, target_chat_id=channel_id,
+                        thumb_message_id=result.get("thumb_message_id"),
+                        video_message_id=result.get("video_message_id"),
+                        success=True,
+                    ))
+                    await db.commit()
 
             from app.modules.notifier import notify_admin
             await notify_admin(

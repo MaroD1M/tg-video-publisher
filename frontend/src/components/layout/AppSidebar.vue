@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { h, type Component } from 'vue'
 import { NLayoutSider, NMenu, NIcon } from 'naive-ui'
-import { MenuOutline } from '@vicons/ionicons5'
 
 const props = defineProps<{
   collapsed: boolean

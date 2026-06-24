@@ -157,6 +157,15 @@ async def _execute_one(job_data: dict):
         if result.get("phase") == "retry_pass2":
             step_logs.append({"step":"retry_pass2","elapsed":round(time.time()-compress_start-compress_elapsed,1),"result":"done" if st=="done" else "retried"})
 
+        # Broadcast step_log immediately so frontend sees it before job_done
+        await broadcast({
+            "type": "progress", "job_id": job_id,
+            "percent": 100, "eta_sec": 0, "elapsed_sec": 0, "speed": 0, "fps": 0,
+            "phase": st + "_done",
+            "step_log": step_logs,
+            "thumbnail_id": thumb_id_val,
+        })
+
         async with async_session() as db:
             job = await db.get(CompressJob, job_id)
             video = await db.get(Video, video_id)
@@ -180,15 +189,6 @@ async def _execute_one(job_data: dict):
                 else:
                     video.status = VideoStatus.failed
                 await db.commit()
-
-        # Broadcast final step_logs so frontend sees them immediately
-        await broadcast({
-            "type": "progress", "job_id": job_id,
-            "percent": 100, "eta_sec": 0, "elapsed_sec": 0, "speed": 0, "fps": 0,
-            "phase": st + "_done",
-            "step_log": step_logs,
-            "thumbnail_id": thumb_id_val,
-        })
 
         # Notify admin
         from app.modules.notifier import notify_admin
@@ -365,6 +365,18 @@ async def list_compress_jobs(
                     seen.add(t.video_id)
                     thumbs[t.video_id] = t.id
 
+        # Batch load published status
+        published_ids = set()
+        if video_ids:
+            from app.database.models import PublishLog
+            pub_rows = (await db.execute(
+                select(PublishLog.video_id).where(
+                    PublishLog.video_id.in_(video_ids),
+                    PublishLog.success == True,
+                )
+            )).scalars().all()
+            published_ids = set(pub_rows)
+
         for j in rows:
             video = videos.get(j.video_id) if j.video_id else None
             thumb_id = thumbs.get(j.video_id) if j.video_id else None
@@ -389,6 +401,8 @@ async def list_compress_jobs(
                 "phase": "",
                 "stderr": job_stderr.get(j.id, "") or j.error_log or "",
                 "thumbnail_id": thumb_id,
+                "finished_at": j.finished_at.isoformat() if j.finished_at else "",
+                "is_published": j.video_id in published_ids if j.video_id else False,
             })
 
     return {"items": items, "total": total, "page": page, "page_size": page_size}

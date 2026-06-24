@@ -330,7 +330,10 @@ onUnmounted(() => {
                 <n-button v-if="task.status === 'queued' && task.is_paused" size="tiny" type="primary" @click.stop="doResume(task.id)">恢复</n-button>
                 <n-button v-if="task.status === 'queued'" size="tiny" @click.stop="doReorder(task.id, 'up')">↑</n-button>
                 <n-button v-if="task.status === 'queued'" size="tiny" @click.stop="doReorder(task.id, 'down')">↓</n-button>
-                <n-button size="tiny" @click.stop="doCancel(task.id)">取消</n-button>
+                <n-popconfirm @positive-click="() => doCancel(task.id)">
+                  <template #trigger><n-button size="tiny">取消</n-button></template>
+                  确定取消此任务？
+                </n-popconfirm>
               </n-space>
             </div>
             <div v-if="expandedTaskId === task.id" style="margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--border-subtle)">
