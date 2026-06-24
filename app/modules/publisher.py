@@ -57,23 +57,8 @@ async def publish_video(
     )
 
     thumb_msg_id = None
-    discussion_chat_id = None
 
-    # Resolve discussion group (linked chat) for comments section
-    try:
-        from app.database.connection import async_session
-        from app.database.models import TargetChat
-        from sqlalchemy import select
-        async with async_session() as db:
-            tc = (await db.execute(
-                select(TargetChat).where(TargetChat.chat_id == channel_id)
-            )).scalar_one_or_none()
-            if tc and tc.linked_chat_id:
-                discussion_chat_id = tc.linked_chat_id
-    except Exception:
-        pass
-
-    # Send thumbnail to channel (always in main channel)
+    # Send thumbnail to channel
     try:
         with open(thumb_path, "rb") as f:
             thumb_msg = await bot.send_photo(
@@ -84,27 +69,17 @@ async def publish_video(
     except Exception as e:
         return {"success": False, "error": f"Thumbnail send failed: {e}"}
 
-    # Send video — to discussion group thread if available, otherwise reply in channel
+    # Send video — reply to thumbnail in channel (Telegram auto-syncs to discussion group)
     try:
         with open(video_path, "rb") as f:
-            kwargs = dict(
-                video=f, caption=video_caption, supports_streaming=True,
-                has_spoiler=True,
+            video_msg = await bot.send_video(
+                chat_id=channel_id, video=f, caption=video_caption,
+                supports_streaming=True, has_spoiler=True,
                 duration=int(duration_sec) if duration_sec else None,
                 width=width if width else None,
                 height=height if height else None,
+                reply_to_message_id=thumb_msg_id,
             )
-            if discussion_chat_id:
-                try:
-                    kwargs["message_thread_id"] = thumb_msg_id
-                    video_msg = await bot.send_video(chat_id=discussion_chat_id, **kwargs)
-                except Exception:
-                    kwargs.pop("message_thread_id", None)
-                    kwargs["reply_to_message_id"] = thumb_msg_id
-                    video_msg = await bot.send_video(chat_id=channel_id, **kwargs)
-            else:
-                kwargs["reply_to_message_id"] = thumb_msg_id
-                video_msg = await bot.send_video(chat_id=channel_id, **kwargs)
 
             return {
                 "success": True,
