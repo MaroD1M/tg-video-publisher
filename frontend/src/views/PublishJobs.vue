@@ -336,14 +336,12 @@ onUnmounted(() => {
     <div v-if="completedTasks.length" style="margin-top: 20px">
       <n-space :size="6" style="margin-bottom: 8px;">
         <n-button size="tiny" @click="showCompleted = !showCompleted">{{ showCompleted ? '收起历史' : `展开历史 (${completedTasks.length})` }}</n-button>
-        <n-popconfirm @positive-click="doRetryAllFailed">
+        <n-popconfirm @positive-click="doRetryAllFailed" positive-text="确定" negative-text="取消">
           <template #trigger><n-button size="tiny" type="primary">重试全部失败</n-button></template>
-          <template #action><n-button size="tiny" type="primary" @click="doRetryAllFailed">确定</n-button><n-button size="tiny" style="margin-left:8px">取消</n-button></template>
           确定重试所有失败任务？
         </n-popconfirm>
-        <n-popconfirm @positive-click="doDeleteAllCompleted">
+        <n-popconfirm @positive-click="doDeleteAllCompleted" positive-text="确定" negative-text="取消">
           <template #trigger><n-button size="tiny" type="error">删除已完成</n-button></template>
-          <template #action><n-button size="tiny" type="error" @click="doDeleteAllCompleted">确定</n-button><n-button size="tiny" style="margin-left:8px">取消</n-button></template>
           确定删除所有已完成任务？
         </n-popconfirm>
       </n-space>
@@ -373,9 +371,8 @@ onUnmounted(() => {
               <n-button v-if="task.status === 'done'" size="tiny" @click.stop="doRetry(task.id)">重新发布</n-button>
               <n-button v-if="task.thumbnail_id" size="tiny" @click.stop="doRegenerateThumb(task.id)">重生成缩略图</n-button>
               <span @click.stop>
-                <n-popconfirm @positive-click="() => doDelete(task.id)">
+                <n-popconfirm @positive-click="() => doDelete(task.id)" positive-text="确定" negative-text="取消">
                   <template #trigger><n-button size="tiny" type="error">删除</n-button></template>
-                  <template #action><n-button size="tiny" type="error" @click="() => doDelete(task.id)">确定</n-button><n-button size="tiny" style="margin-left:8px">取消</n-button></template>
                   确定删除此记录？
                 </n-popconfirm>
               </span>
