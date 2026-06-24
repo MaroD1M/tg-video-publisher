@@ -17,6 +17,7 @@ const filterDateFrom = ref<number | null>(null)
 const filterDateTo = ref<number | null>(null)
 const channels = ref<any[]>([])
 const currentPage = ref(1)
+const pageSize = 20
 
 const columns = [
   { title: '文件名', key: 'filename', ellipsis: { tooltip: true }, render: (r: any) => {
@@ -68,7 +69,7 @@ async function loadChannels() {
 async function load() {
   loading.value = true
   try {
-    const params: any = { page: currentPage.value, page_size: 50 }
+    const params: any = { page: currentPage.value, page_size: pageSize }
     if (searchText.value) params.search = searchText.value
     if (filterSuccess.value !== null) params.success = filterSuccess.value === 'success'
     if (filterChatId.value) params.chat_id = filterChatId.value
@@ -79,6 +80,11 @@ async function load() {
     total.value = data.total || 0
   } catch { message.error('加载发布记录失败') }
   loading.value = false
+}
+
+function handlePageChange(page: number) {
+  currentPage.value = page
+  load()
 }
 
 function onSearch() {
@@ -137,7 +143,7 @@ onMounted(() => {
         <n-select
           v-model:value="filterChatId" :options="[
             { label: '全部频道', value: null as any },
-            ...channels.map((c: any) => ({ label: (c.chat_name || String(c.chat_id)).length > 18 ? (c.chat_name || String(c.chat_id)).slice(0, 16) + '…' : (c.chat_name || String(c.chat_id)), value: c.chat_id })),
+            ...channels.map((c: any) => ({ label: (c.alias || c.chat_name || String(c.chat_id)).length > 18 ? (c.alias || c.chat_name || String(c.chat_id)).slice(0, 16) + '…' : (c.alias || c.chat_name || String(c.chat_id)), value: c.chat_id })),
           ]" size="small" style="width: 150px" @update:value="onSearch" filterable />
         <n-date-picker v-model:value="filterDateFrom" type="date" size="small" placeholder="开始" style="width: 120px" clearable @update:value="onSearch" />
         <n-date-picker v-model:value="filterDateTo" type="date" size="small" placeholder="结束" style="width: 120px" clearable @update:value="onSearch" />
@@ -154,7 +160,7 @@ onMounted(() => {
           :columns="columns"
           :data="logs"
           :loading="loading"
-          :pagination="false"
+          :pagination="{ page: currentPage, pageSize: pageSize, itemCount: total, onChange: handlePageChange }"
           size="small"
         />
       </n-spin>

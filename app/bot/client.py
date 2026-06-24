@@ -69,6 +69,7 @@ async def discover_chats() -> list[dict]:
             chats.append({
                 "chat_id": r.chat_id,
                 "chat_name": r.chat_name or str(r.chat_id),
+                "alias": r.alias,
                 "chat_type": r.chat_type,
                 "linked_chat_id": r.linked_chat_id,
                 "is_forum": False,
@@ -129,6 +130,12 @@ async def verify_chat(chat_id: int) -> dict:
         # Save verified chat to DB
         await _save_chat(result)
 
+        # Load alias from DB
+        async with async_session() as db:
+            tc = await db.get(TargetChat, chat_id)
+            if tc and tc.alias:
+                result["alias"] = tc.alias
+
         return result
     except TelegramError as e:
         return {"ok": False, "error": str(e)}
@@ -149,7 +156,13 @@ async def _save_chat(info: dict):
                 linked_chat_id=info.get("linked_chat_id"),
                 is_active=True,
             ))
-            await db.commit()
+        else:
+            # Update name and type from Telegram (preserve user alias)
+            existing.chat_name = info.get("chat_name", existing.chat_name)
+            existing.chat_type = info.get("chat_type", existing.chat_type)
+            if info.get("linked_chat_id") is not None:
+                existing.linked_chat_id = info.get("linked_chat_id")
+        await db.commit()
 
 
 def _chat_to_dict(chat) -> dict:

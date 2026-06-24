@@ -3,7 +3,7 @@ import { ref, onMounted, onUnmounted, computed, h } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   NCard, NProgress, NTag, NText, NEmpty, NSpace, NButton, NImage,
-  NGrid, NGi, NStatistic, useMessage,
+  NGrid, NGi, NStatistic, NPopconfirm, NSelect, useMessage,
 } from 'naive-ui'
 import { fetchPublishTasks, cancelPublishTask, retryPublishTask, getThumbnailImage, regenerateThumbnail, pausePublishTask, resumePublishTask, reorderPublishTask, deletePublishTask, batchPublish, fetchChats } from '@/api/client'
 import api from '@/api/client'
@@ -41,9 +41,9 @@ async function initPending() {
   try {
     const d = await fetchChats()
     channelOpts.value = (d.items || []).map((c: any) => ({
-      label: (c.chat_name || String(c.chat_id)).slice(0, 16) + ((c.chat_name || '').length > 16 ? '…' : ''),
+      label: (c.alias || c.chat_name || String(c.chat_id)).slice(0, 16) + ((c.alias || c.chat_name || '').length > 16 ? '…' : ''),
       value: c.chat_id,
-      label_full: c.chat_name || String(c.chat_id),
+      label_full: c.alias || c.chat_name || String(c.chat_id),
     }))
   } catch {}
 }
@@ -110,9 +110,11 @@ function connectWS() {
       const t = tasks.value.find(j => j.id === msg.task_id)
       if (t) { t.status = 'failed'; t.error_log = msg.error || '' }
       dedupedToast('error', msg.video_name, `发布失败: ${msg.video_name}`)
+      load()
     } else if (msg.type === 'publish_cancelled') {
       const t = tasks.value.find(j => j.id === msg.task_id)
       if (t) t.status = 'cancelled'
+      load()
     }
   }
   ws.value.onclose = () => {

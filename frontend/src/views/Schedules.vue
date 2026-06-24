@@ -81,10 +81,12 @@ function onCronPreset(val: string) {
 const columns = [
   { title: '名称', key: 'name', width: 150 },
   { title: 'Cron 表达式', key: 'cron_expr', width: 110 },
-  { title: '目标频道', key: 'target_chat_name', ellipsis: { tooltip: true }, render: (r: any) => r.target_chat_name || r.target_chat_id || '-' },
+  { title: '目标频道', key: 'target_chat_name', ellipsis: { tooltip: true }, render: (r: any) => {
+    return h('span', r.target_chat_alias ? `${r.target_chat_alias} [${r.target_chat_name || r.target_chat_id}]` : (r.target_chat_name || r.target_chat_id || '-'))
+  } },
   { title: '队列', key: 'item_count', width: 55, render: (r: any) => r.item_count || 0 },
   { title: '策略', key: 'queue_strategy', width: 65, render: (r: any) => {
-    const labels: Record<string, string> = { sequential: '顺序', random: '随机', rotate: '循环' }
+    const labels: Record<string, string> = { sequential: '顺序', random: '随机' }
     return labels[r.queue_strategy] || r.queue_strategy
   } },
   { title: '下次执行', key: 'next_run_at', width: 90, ellipsis: { tooltip: true }, render: (r: any) => r.next_run_at ? new Date(r.next_run_at).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—' },
@@ -141,7 +143,7 @@ async function loadChannels() {
   try {
     const d = await fetchChats()
     channelOptions.value = (d.items || []).map((c: any) => ({
-      label: c.chat_name?.length > 20 ? c.chat_name.slice(0, 18) + '…' : (c.chat_name || String(c.chat_id)),
+      label: (c.alias || c.chat_name)?.length > 20 ? (c.alias || c.chat_name || String(c.chat_id)).slice(0, 18) + '…' : (c.alias || c.chat_name || String(c.chat_id)),
       value: c.chat_id,
     }))
   } catch {}
@@ -194,20 +196,24 @@ const queueLoading = ref(false)
 async function openQueue(schedule: any) {
   queueScheduleId.value = schedule.id
   queueScheduleName.value = schedule.name
+  showQueueModal.value = true
+  await loadQueueItems()
+}
+
+async function loadQueueItems() {
   queueLoading.value = true
   try {
-    const { data } = await api.get(`/schedules/${schedule.id}/items`)
+    const { data } = await api.get(`/schedules/${queueScheduleId.value}/items`)
     queueItems.value = data.items || []
   } catch { message.error('加载队列失败') }
   queueLoading.value = false
-  showQueueModal.value = true
 }
 
 async function removeQueueItem(itemId: number) {
   try {
     await api.put(`/schedules/${queueScheduleId.value}/items?action=remove`, [itemId])
     message.success('已移除')
-    queueItems.value = queueItems.value.filter((i: any) => i.id !== itemId)
+    await loadQueueItems()
   } catch { message.error('移除失败') }
 }
 
@@ -349,6 +355,9 @@ onMounted(() => {
     <!-- Queue management modal -->
     <n-modal v-model:show="showQueueModal" :title="'计划队列 - ' + queueScheduleName" style="width: 600px">
       <n-card>
+        <n-space justify="end" style="margin-bottom: 8px">
+          <n-button size="tiny" @click="loadQueueItems">刷新</n-button>
+        </n-space>
         <n-spin :show="queueLoading">
           <n-empty v-if="!queueLoading && !queueItems.length" description="队列为空，从视频管理页选择视频加入计划" style="margin: 30px 0" />
           <n-dataTable

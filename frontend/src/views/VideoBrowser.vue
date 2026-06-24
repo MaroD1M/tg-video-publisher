@@ -5,7 +5,7 @@ import {
   NCard, NInput, NButton, NDataTable, NSpace,
   NTag, NText, NEmpty,
   NBreadcrumb, NBreadcrumbItem, NSpin, NProgress, NIcon,
-  NPopconfirm, useMessage,
+  NPopconfirm, NPopover, useMessage,
 } from 'naive-ui'
 import { ScanOutline } from '@vicons/ionicons5'
 import { fetchVideos, scanDirectory, deleteVideo, fetchChats, publishNow, cancelPublishTask, retryPublishTask } from '@/api/client'
@@ -18,8 +18,14 @@ const router = useRouter()
 
 function navigateTo(path: string) {
   const ids = Array.from(selectedIds.value)
-  if (!ids.length) return
+  if (!ids.length) { message.warning('请先选择视频'); return }
   router.push({ path, query: { ids: ids.join(',') } })
+}
+
+function unselectVideo(id: number) {
+  const next = new Set(selectedIds.value)
+  next.delete(id)
+  selectedIds.value = next
 }
 
 const currentPath = ref('/data/videos')
@@ -27,8 +33,10 @@ const videos = ref<any[]>([])
 const loading = ref(false)
 const scanning = ref(false)
 const selectedIds = ref<Set<number>>(new Set())
-const hasSelected = computed(() => selectedIds.value.size > 0)
 const selectedCount = computed(() => selectedIds.value.size)
+const selectedVideos = computed(() =>
+  (videos.value || []).filter(v => selectedIds.value.has(v.id))
+)
 const filterStatus = ref('')
 const searchText = ref('')
 const sortKey = ref('')
@@ -160,7 +168,7 @@ const columns = [
 const channels = ref<any[]>([])
 
 async function loadChannels() {
-  try { const d = await fetchChats(); channels.value = (d.items || []).map((c: any) => ({ ...c, _label: c.chat_name?.length > 16 ? c.chat_name.slice(0,14)+'…' : c.chat_name })) } catch {}
+  try { const d = await fetchChats(); channels.value = (d.items || []).map((c: any) => ({ ...c, _label: (c.alias || c.chat_name)?.length > 16 ? (c.alias || c.chat_name).slice(0,14)+'…' : (c.alias || c.chat_name) })) } catch {}
 }
 
 const ws = ref<WebSocket | null>(null)
@@ -280,24 +288,39 @@ const hasActiveTasks = computed(() => runningJobs.value.length > 0 || publishTas
         :checked-row-keys="Array.from(selectedIds)"
         @update:checked-row-keys="(keys: number[]) => selectedIds = new Set(keys)"
         size="small"
-        :max-height="hasSelected ? 'calc(100vh - 480px)' : 'calc(100vh - 260px)'"
+        :max-height="'calc(100vh - 360px)'"
         virtual-scroll
         style="margin-bottom: 8px"
         @update:sorter="(s: any) => { if(s){sortKey=s.key;sortDir=s.order==='ascend'?'asc':'desc'} else {sortKey='';sortDir='asc'} }"
       />
     </n-spin>
 
-    <!-- Sticky action bar -->
-    <div v-if="hasSelected" class="action-bar">
+    <!-- Sticky action bar — always visible -->
+    <div class="action-bar">
       <n-card size="small" :bordered="true">
         <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
-          <n-text>已选择 <strong>{{ selectedCount }}</strong> 个</n-text>
-          <n-button size="tiny" @click="selectedIds = new Set()">清空</n-button>
+          <n-popover trigger="click" :disabled="selectedCount === 0" :width="260" placement="top-start">
+            <template #trigger>
+              <n-text :depth="selectedCount === 0 ? 3 : undefined" style="cursor: pointer; user-select: none;">
+                已选择 <strong>{{ selectedCount }}</strong> 个 <span style="font-size:10px;opacity:0.5">▾</span>
+              </n-text>
+            </template>
+            <div style="max-height: 240px; overflow-y: auto; margin-bottom: 8px;">
+              <div v-for="v in selectedVideos" :key="v.id"
+                style="display: flex; align-items: center; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid var(--border-subtle); font-size: 12px;">
+                <n-text style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;">{{ v.filename }}</n-text>
+                <n-button size="tiny" quaternary type="error" @click="unselectVideo(v.id)" style="margin-left: 6px; flex-shrink: 0;">✕</n-button>
+              </div>
+              <n-empty v-if="!selectedVideos.length" description="无选中视频" style="margin: 12px 0;" />
+            </div>
+            <n-button size="tiny" type="error" block @click="selectedIds = new Set()" style="margin-top: 4px;">清空全部</n-button>
+          </n-popover>
+          <n-button size="tiny" :disabled="selectedCount === 0" @click="selectedIds = new Set()">清空</n-button>
 
           <div style="margin-left: auto; display: flex; gap: 8px; align-items: center;">
-            <n-button type="default" size="small" @click="navigateTo('/schedules')">📅 加入计划</n-button>
-            <n-button type="info" size="small" @click="navigateTo('/publish-tasks')">📤 立即发布</n-button>
-            <n-button type="primary" size="small" @click="navigateTo('/compress')">⚡ 加入压缩任务</n-button>
+            <n-button type="default" size="small" :disabled="selectedCount === 0" @click="navigateTo('/schedules')">📅 加入计划</n-button>
+            <n-button type="info" size="small" :disabled="selectedCount === 0" @click="navigateTo('/publish-tasks')">📤 立即发布</n-button>
+            <n-button type="primary" size="small" :disabled="selectedCount === 0" @click="navigateTo('/compress')">⚡ 加入压缩任务</n-button>
           </div>
         </div>
       </n-card>

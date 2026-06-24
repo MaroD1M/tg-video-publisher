@@ -1,6 +1,7 @@
 import datetime
 import asyncio
 import json
+import time
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,7 +11,7 @@ from typing import Optional
 from app.database.connection import get_db, async_session
 from app.database.models import Video, VideoStatus, CompressJob, JobStatus, CompressPreset, Thumbnail, Schedule, ScheduleItem, ItemStatus
 from app.modules.compressor import (
-    run_compress_job, set_broadcast_callback,
+    run_compress_job, set_broadcast_callback, broadcast,
     cancel_events, pause_events, job_stderr,
 )
 from app.utils.helpers import get_setting
@@ -71,6 +72,7 @@ async def _compression_worker():
 async def _execute_one(job_data: dict):
     job_id = job_data["job_id"]
     video_id = job_data["video_id"]
+    step_logs = []
 
     async with async_session() as db:
         job = await db.get(CompressJob, job_id)
@@ -81,31 +83,47 @@ async def _execute_one(job_data: dict):
         job.started_at = datetime.datetime.utcnow()
         video.status = VideoStatus.compressing
 
-        # Look up thumbnail
-        thumb_id = (await db.execute(
-            select(Thumbnail.id).where(Thumbnail.video_id == video_id).order_by(Thumbnail.id.desc()).limit(1)
-        )).scalar_one_or_none()
-
-        await db.commit()
-
         input_path = video.filepath
         output_filename = job.output_filename or f"compressed_{video.filename}"
         duration_sec = video.duration_sec
         size_bytes = video.size_bytes
         preset = job.preset
         filename = video.filename
-        thumb_id_val = thumb_id
         target_size_mb = job.target_size_mb
         target_width = job.target_width
         target_height = job.target_height
         schedule_id = job.schedule_id
         publish_after = job.publish_after
         publish_channel_id = job.publish_channel_id
+        await db.commit()
 
     try:
         layout = await get_setting("thumbnail_layout", "3x3")
         output_dir = await get_setting("output_dir", "/data/output")
 
+        # Phase 1: Generate thumbnail from original video (before compression)
+        thumb_id_val = None
+        thumb_start = time.time()
+        try:
+            from app.modules.publisher import ensure_thumbnail
+            async with async_session() as db:
+                video_obj = await db.get(Video, video_id)
+                if video_obj:
+                    thumb_path = await ensure_thumbnail(video_obj, input_path, db)
+                    if thumb_path:
+                        thumb_row = (await db.execute(
+                            select(Thumbnail.id).where(Thumbnail.video_id == video_id)
+                            .order_by(Thumbnail.id.desc()).limit(1)
+                        )).scalar_one_or_none()
+                        if thumb_row:
+                            thumb_id_val = thumb_row
+        except Exception:
+            pass
+        thumb_elapsed = round(time.time() - thumb_start, 1)
+        step_logs.append({"step":"thumbnail","elapsed":thumb_elapsed,"result":"done" if thumb_id_val else "skipped","thumb_id":thumb_id_val})
+
+        # Phase 2: Run compression
+        compress_start = time.time()
         result = await run_compress_job(
             job_id=job_id, video_id=video_id,
             input_path=input_path, output_filename=output_filename,
@@ -116,6 +134,21 @@ async def _execute_one(job_data: dict):
             target_height=target_height,
             thumbnail_id=thumb_id_val,
         )
+        compress_elapsed = round(time.time() - compress_start, 1)
+
+        st = result["status"]
+        if st in ("done", "skipped"):
+            out_size = result.get("output_size", 0)
+            speed = round(duration_sec / compress_elapsed, 1) if compress_elapsed > 0 and duration_sec > 0 else 0
+            step_logs.append({"step":"encoding","elapsed":compress_elapsed,"result":"done" if st == "done" else "skipped","speed":speed,"output_gb":round(out_size/1e9,2)})
+        elif st == "cancelled":
+            step_logs.append({"step":"encoding","elapsed":compress_elapsed,"result":"cancelled"})
+        else:
+            step_logs.append({"step":"encoding","elapsed":compress_elapsed,"result":"failed","error":result.get("error","")[:200]})
+
+        # Check for retry pass
+        if result.get("phase") == "retry_pass2":
+            step_logs.append({"step":"retry_pass2","elapsed":round(time.time()-compress_start-compress_elapsed,1),"result":"done" if st=="done" else "retried"})
 
         async with async_session() as db:
             job = await db.get(CompressJob, job_id)
@@ -127,9 +160,9 @@ async def _execute_one(job_data: dict):
                 if job.output_size_bytes and size_bytes:
                     job.compression_ratio = round((1 - job.output_size_bytes / size_bytes) * 100, 1)
 
-                st = result["status"]
                 job.status = JobStatus(st)
                 job.error_log = result.get("stderr", "") or result.get("error", "")
+                job.step_log = json.dumps(step_logs)
                 if st == "done":
                     video.status = VideoStatus.compressed
                 elif st == "skipped":
@@ -160,18 +193,6 @@ async def _execute_one(job_data: dict):
         elif result["status"] == "cancelled":
             await notify_admin(f"⏹ 压缩已取消: {filename}")
 
-        # Auto-generate thumbnail after compression (done or skipped)
-        if result["status"] in ("done", "skipped"):
-            try:
-                from app.modules.publisher import ensure_thumbnail, resolve_video_path
-                async with async_session() as db:
-                    video = await db.get(Video, video_id)
-                    if video:
-                        video_path, _ = await resolve_video_path(video)
-                        await ensure_thumbnail(video, video_path, db)
-            except Exception:
-                pass
-
         # Auto-add to schedule if requested
         if schedule_id and result["status"] in ("done", "skipped"):
             await _auto_add_to_schedule(job_id, video_id, schedule_id)
@@ -181,12 +202,14 @@ async def _execute_one(job_data: dict):
             await _publish_compressed(job_id, video_id, publish_channel_id)
 
     except Exception as e:
+        step_logs.append({"step":"error","elapsed":0,"result":"failed","error":str(e)[:200]})
         async with async_session() as db:
             job = await db.get(CompressJob, job_id)
             video = await db.get(Video, video_id)
             if job:
                 job.status = JobStatus.failed
                 job.error_log = str(e)
+                job.step_log = json.dumps(step_logs)
                 job.finished_at = datetime.datetime.utcnow()
             if video:
                 video.status = VideoStatus.failed
@@ -198,19 +221,14 @@ async def start_worker():
     global worker_task, worker_tasks
     set_broadcast_callback(_broadcast_fn)
     async with _worker_lock:
-        # Cancel existing workers if any
-        for t in worker_tasks:
-            if not t.done():
-                t.cancel()
-        worker_tasks = []
-
-        if worker_task is not None and not worker_task.done():
+        # Check if workers are already running
+        active = [t for t in worker_tasks if not t.done()]
+        if active:
             return  # Already running
 
         # Reset stuck running jobs (container restarted)
         try:
             async with async_session() as db:
-                from app.database.models import Video, VideoStatus
                 rows = (await db.execute(
                     select(CompressJob).where(CompressJob.status == JobStatus.running)
                 )).scalars().all()
@@ -232,9 +250,8 @@ async def start_worker():
         except (ValueError, TypeError):
             max_w = 1
 
-        for _ in range(max_w):
-            worker_tasks.append(asyncio.create_task(_compression_worker()))
-        worker_task = worker_tasks[0] if worker_tasks else None
+        worker_tasks = [asyncio.create_task(_compression_worker()) for _ in range(max_w)]
+        worker_task = worker_tasks[0]
 
 
 @router.post("/compress")
@@ -341,7 +358,12 @@ async def list_compress_jobs(
                 "progress": j.progress,
                 "status": j.status.value if j.status else "queued",
                 "error_log": j.error_log or job_stderr.get(j.id, ""),
+                "step_log": json.loads(j.step_log) if j.step_log else [],
                 "eta_sec": 0,
+                "elapsed_sec": 0,
+                "speed": 0,
+                "fps": 0,
+                "phase": "",
                 "stderr": job_stderr.get(j.id, "") or j.error_log or "",
                 "thumbnail_id": thumb_id,
             })
@@ -427,8 +449,8 @@ async def retry_job(job_id: int, db: AsyncSession = Depends(get_db)):
     job = await db.get(CompressJob, job_id)
     if not job:
         raise HTTPException(404, "Job not found")
-    if job.status != JobStatus.failed:
-        raise HTTPException(400, "Job is not failed")
+    if job.status not in (JobStatus.failed, JobStatus.skipped, JobStatus.cancelled):
+        raise HTTPException(400, "Job cannot be retried")
 
     # Reset job
     job.status = JobStatus.queued
@@ -446,7 +468,6 @@ async def retry_job(job_id: int, db: AsyncSession = Depends(get_db)):
 
 async def _auto_add_to_schedule(job_id: int, video_id: int, schedule_id: int):
     """After compression completes, auto-add the video to a schedule's queue."""
-    from app.database.models import Schedule, ScheduleItem, ItemStatus
     from app.modules.notifier import notify_admin
 
     try:

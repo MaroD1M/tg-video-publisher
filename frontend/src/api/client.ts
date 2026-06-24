@@ -219,6 +219,11 @@ export async function refreshChats() {
   return data
 }
 
+export async function setChatAlias(chatId: number, alias: string) {
+  const { data } = await api.put(`/chats/${chatId}/alias`, { alias })
+  return data
+}
+
 export async function browseDirectory(path: string) {
   const { data } = await api.get('/videos/browse', { params: { path } })
   return data

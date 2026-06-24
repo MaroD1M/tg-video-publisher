@@ -21,7 +21,7 @@ _worker_lock = asyncio.Lock()
 async def broadcast_publish(msg: dict):
     from app.api.websocket import active_connections
     data = json.dumps(msg)
-    for ws in active_connections:
+    for ws in list(active_connections):
         try:
             await ws.send_text(data)
         except Exception:
@@ -89,6 +89,12 @@ async def _execute_publish(task_id: int):
         thumb_start = time.time()
         from app.modules.publisher import ensure_thumbnail, resolve_video_path
 
+        # Resolve correct width/height: use compress target if compressed, else original
+        pub_width = 0
+        pub_height = 0
+        thumb_tpl = ""
+        video_tpl = ""
+
         async with async_session() as db:
             video_obj = await db.get(Video, task.video_id) if task.video_id else None
             if not video_obj:
@@ -102,6 +108,31 @@ async def _execute_publish(task_id: int):
                 .order_by(Thumbnail.id.desc()).limit(1)
             )).scalar_one_or_none()
             thumb_id = thumb_row
+
+            # Resolve dimensions: use compress target if video was compressed
+            pub_width = video_obj.width or 0
+            pub_height = video_obj.height or 0
+            if vpath != video_obj.filepath:
+                from app.database.models import CompressJob
+                comp_job = (await db.execute(
+                    select(CompressJob).where(
+                        CompressJob.video_id == video_obj.id,
+                        CompressJob.status == JobStatus.done,
+                    ).order_by(CompressJob.id.desc()).limit(1)
+                )).scalar_one_or_none()
+                if comp_job:
+                    if comp_job.target_width > 0:
+                        pub_width = comp_job.target_width
+                    if comp_job.target_height > 0:
+                        pub_height = comp_job.target_height
+
+            # Resolve templates: schedule templates take priority over global settings
+            if task.schedule_id:
+                from app.database.models import Schedule
+                sched = await db.get(Schedule, task.schedule_id)
+                if sched:
+                    thumb_tpl = sched.thumb_caption_template or ""
+                    video_tpl = sched.video_caption_template or ""
 
         elapsed = time.time() - thumb_start
         step_logs.append({"step":"prepare","elapsed":round(elapsed,1),"result":"done"})
@@ -117,34 +148,6 @@ async def _execute_publish(task_id: int):
 
         # Step 2: Publish to Telegram
         from app.modules.publisher import publish_video
-        from app.utils.helpers import get_setting
-
-        # Resolve correct width/height: use compress target if compressed, else original
-        pub_width = video_obj.width or 0
-        pub_height = video_obj.height or 0
-        if vpath != video_obj.filepath:
-            from app.database.models import CompressJob, JobStatus as CJStatus
-            comp_job = (await db.execute(
-                select(CompressJob).where(
-                    CompressJob.video_id == video_obj.id,
-                    CompressJob.status == CJStatus.done,
-                ).order_by(CompressJob.id.desc()).limit(1)
-            )).scalar_one_or_none()
-            if comp_job:
-                if comp_job.target_width > 0:
-                    pub_width = comp_job.target_width
-                if comp_job.target_height > 0:
-                    pub_height = comp_job.target_height
-
-        # Resolve templates: schedule templates take priority over global settings
-        thumb_tpl = ""
-        video_tpl = ""
-        if task.schedule_id:
-            from app.database.models import Schedule
-            sched = await db.get(Schedule, task.schedule_id)
-            if sched:
-                thumb_tpl = sched.thumb_caption_template or ""
-                video_tpl = sched.video_caption_template or ""
 
         result = await publish_video(
             video_path=vpath, thumb_path=thumb_path, channel_id=channel_id,

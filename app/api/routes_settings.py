@@ -259,6 +259,17 @@ async def refresh_chats():
     return {"items": chats}
 
 
+@router.put("/chats/{chat_id}/alias")
+async def set_chat_alias(chat_id: int, body: dict, db: AsyncSession = Depends(get_db)):
+    from app.database.models import TargetChat
+    tc = await db.get(TargetChat, chat_id)
+    if not tc:
+        raise HTTPException(404, "Chat not found")
+    tc.alias = body.get("alias", "") or None
+    await db.commit()
+    return {"ok": True}
+
+
 @router.get("/bot/status")
 async def bot_status():
     """Detailed Bot API diagnostic info."""

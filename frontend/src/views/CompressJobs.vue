@@ -3,8 +3,9 @@ import { ref, onMounted, onUnmounted, h, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   NCard, NProgress, NTag, NText, NEmpty, NSpace, NButton, NInputNumber,
-  NPopconfirm, NImage, NGrid, NGi, NStatistic, NSelect, NSlider, useMessage
+  NPopconfirm, NImage, NGrid, NGi, NStatistic, NSelect, NSlider, NIcon, useMessage
 } from 'naive-ui'
+import { TimeOutline } from '@vicons/ionicons5'
 import { fetchCompressJobs, cancelCompressJob, pauseJob, resumeJob, retryCompressJob, getThumbnailImage, publishNow, fetchChats, deleteCompressJob, batchDeleteCompress, batchConfigCompress, submitCompress, updateCompressSettings } from '@/api/client'
 import api from '@/api/client'
 import PageHeader from '@/components/shared/PageHeader.vue'
@@ -95,6 +96,7 @@ interface Job {
   thumbnail_id: number | null
   skip_reason: string
   phase: string
+  step_log: { step: string; elapsed: number; result: string; error?: string; speed?: number; output_gb?: number; thumb_id?: number }[]
 }
 
 const jobs = ref<Job[]>([])
@@ -347,11 +349,13 @@ async function load() {
               </div>
               <n-tag :type="job.status === 'running' ? 'warning' : 'default'" size="small" :bordered="false" round>{{ statusLabel(job.status) }}</n-tag>
             </div>
-            <n-text v-if="job.phase" depth="3" style="font-size:10px;display:block;margin-bottom:4px">{{ job.phase === 'encoding' ? '🎞 正在编码' : job.phase === 'retry_pass2' ? '🔄 二阶段重试' : job.phase }}</n-text>
+            <n-text v-if="job.phase" depth="3" style="font-size:10px;display:block;margin-bottom:4px">{{ job.phase === 'thumbnail' ? '🖼 正在提取缩略图' : job.phase === 'encoding' ? '🎞 正在编码' : job.phase === 'retry_pass2' ? '🔄 二阶段重试' : job.phase }}</n-text>
+            <n-text v-else-if="job.status === 'queued'" depth="3" style="font-size:10px;display:block;margin-bottom:4px">🕐 排队中</n-text>
             <n-progress type="line" :percentage="job.progress || 0" :height="16" :border-radius="8" :color="statusColor(job.status)" :indicator-placement="'inside'" :processing="job.status === 'running'" />
             <div style="margin-top: 8px; display: flex; align-items: center; gap: 10px; font-size: 12px;">
-              <n-text depth="3" style="flex: 1">
-                ⏱ {{ formatElapsed(job.elapsed_sec) }}
+              <n-text depth="3" style="flex: 1; display: flex; align-items: center; gap: 4px;">
+                <n-icon :size="14"><TimeOutline /></n-icon>
+                {{ formatElapsed(job.elapsed_sec) }}
                 <template v-if="job.eta_sec"> · {{ formatEta(job.eta_sec) }}</template>
                 <template v-if="job.speed"> · {{ job.speed }}x</template>
                 <template v-if="job.fps"> · {{ job.fps }}fps</template>
@@ -388,8 +392,14 @@ async function load() {
               </n-space>
             </div>
             <div v-if="expandedJobId === job.id" style="margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border-subtle)">
+              <div v-if="job.step_log && job.step_log.length" style="margin-bottom: 6px">
+                <n-text depth="3" style="font-size: 11px; display: block; margin-bottom: 2px;">步骤日志：</n-text>
+                <n-text v-for="(s,i) in job.step_log" :key="i" depth="3" style="font-size: 11px; display: block;">
+                  {{ i+1 }}. {{ s.step }} — {{ s.elapsed }}s {{ s.result }}{{ s.speed ? ' · '+s.speed+'x' : '' }}{{ s.output_gb ? ' · '+s.output_gb+'GB' : '' }}{{ s.thumb_id ? ' · #'+s.thumb_id : '' }}{{ s.error ? ': '+s.error.slice(0,60) : '' }}
+                </n-text>
+              </div>
               <n-text depth="3" style="font-size: 11px; white-space: pre-wrap; font-family: monospace; word-break: break-all; max-height: 200px; overflow-y: auto; display: block;">
-                {{ job.stderr || '暂无详情' }}
+                {{ job.stderr || job.error_log || '暂无详情' }}
               </n-text>
             </div>
           </div>
@@ -431,7 +441,8 @@ async function load() {
               <div style="margin-top: 4px; display: flex; gap: 6px; flex-wrap: wrap;">
                 <n-button size="tiny" @click.stop="toggleExpand(job.id)">{{ expandedJobId === job.id ? '收起' : '详情' }}</n-button>
                 <n-button v-if="job.status === 'done' || job.status === 'skipped'" size="tiny" @click.stop="doPublish(job)">发布</n-button>
-                <n-button v-if="job.status === 'failed'" size="tiny" type="primary" @click.stop="doRetryWithConfig(job.id); initRetryConfig(job)">重试</n-button>
+                <n-button v-if="job.status === 'failed' || job.status === 'cancelled'" size="tiny" @click.stop="doPublish(job)">发布</n-button>
+                <n-button v-if="job.status === 'failed' || job.status === 'skipped' || job.status === 'cancelled'" size="tiny" type="primary" @click.stop="doRetryWithConfig(job.id); initRetryConfig(job)">重试</n-button>
                 <n-popconfirm @positive-click="() => doDeleteJob(job.id)">
                   <template #trigger><n-button size="tiny" type="error" @click.stop>删除</n-button></template>
                   <template #action><n-button size="tiny" type="error" @click="() => doDeleteJob(job.id)">确定</n-button><n-button size="tiny" style="margin-left:8px">取消</n-button></template>
@@ -439,8 +450,14 @@ async function load() {
                 </n-popconfirm>
               </div>
               <div v-if="expandedJobId === job.id" style="margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--border-subtle)">
-                <n-text depth="3" style="font-size: 11px; white-space: pre-wrap; font-family: monospace; word-break: break-all; max-height: 200px; overflow-y: auto; display: block;">{{ job.stderr || '暂无详情' }}</n-text>
-                <template v-if="job.status === 'failed' || job.status === 'skipped'">
+                <div v-if="job.step_log && job.step_log.length" style="margin-bottom: 6px">
+                  <n-text depth="3" style="font-size: 11px; display: block; margin-bottom: 2px;">步骤日志：</n-text>
+                  <n-text v-for="(s,i) in job.step_log" :key="i" depth="3" style="font-size: 11px; display: block;">
+                    {{ i+1 }}. {{ s.step }} — {{ s.elapsed }}s {{ s.result }}{{ s.speed ? ' · '+s.speed+'x' : '' }}{{ s.output_gb ? ' · '+s.output_gb+'GB' : '' }}{{ s.thumb_id ? ' · #'+s.thumb_id : '' }}{{ s.error ? ': '+s.error.slice(0,60) : '' }}
+                  </n-text>
+                </div>
+                <n-text depth="3" style="font-size: 11px; white-space: pre-wrap; font-family: monospace; word-break: break-all; max-height: 200px; overflow-y: auto; display: block;">{{ job.stderr || job.error_log || '暂无详情' }}</n-text>
+                <template v-if="job.status === 'failed' || job.status === 'skipped' || job.status === 'cancelled'">
                   <n-space :size="6" style="margin-top: 6px">
                     <n-text depth="3" style="font-size:10px">重试参数:</n-text>
                     <n-select v-model:value="retryConfig[job.id].preset" size="tiny" style="width:110px" :options="[{label:'极速 H.264',value:'fast'},{label:'均衡 H.265',value:'balanced'},{label:'高画质',value:'high_quality'}]" @click.stop />

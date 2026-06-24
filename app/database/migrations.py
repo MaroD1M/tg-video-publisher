@@ -11,6 +11,9 @@ MISSING_COLUMNS = {
         ("thumb_caption_template", "TEXT DEFAULT ''"),
         ("video_caption_template", "TEXT DEFAULT ''"),
     ],
+    "target_chats": [
+        ("alias", "TEXT"),
+    ],
     "compress_jobs": [
         ("target_size_mb", "INTEGER DEFAULT 1000"),
         ("target_width", "INTEGER DEFAULT 0"),
@@ -18,6 +21,7 @@ MISSING_COLUMNS = {
         ("schedule_id", "INTEGER DEFAULT 0"),
         ("publish_after", "BOOLEAN DEFAULT 0"),
         ("publish_channel_id", "BIGINT DEFAULT 0"),
+        ("step_log", "TEXT"),
     ],
     "publish_tasks": [
         ("sort_order", "INTEGER DEFAULT 0"),

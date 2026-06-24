@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, h } from 'vue'
 import { useRouter } from 'vue-router'
-import { NCard, NGrid, NGi, NText, NButton, NDataTable, NTag, NAlert, NSpace, NSpin, NDivider, useMessage } from 'naive-ui'
+import { NCard, NGrid, NGi, NText, NButton, NDataTable, NTag, NAlert, NSpace, NSpin, NDivider, NModal, NInput, useMessage } from 'naive-ui'
 import PageHeader from '@/components/shared/PageHeader.vue'
 import PageContainer from '@/components/shared/PageContainer.vue'
 import StatusDot from '@/components/shared/StatusDot.vue'
-import { fetchChats, refreshChats } from '@/api/client'
+import { fetchChats, refreshChats, setChatAlias } from '@/api/client'
 import api from '@/api/client'
 
 const router = useRouter()
@@ -16,10 +16,43 @@ const status = ref<Record<string, any>>({})
 const testing = ref(false)
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
+const aliasModal = ref(false)
+const aliasChatId = ref(0)
+const aliasValue = ref('')
+const aliasSaving = ref(false)
+
+function openAlias(chat: any) {
+  aliasChatId.value = chat.chat_id
+  aliasValue.value = chat.alias || ''
+  aliasModal.value = true
+}
+
+async function saveAlias() {
+  aliasSaving.value = true
+  try {
+    await setChatAlias(aliasChatId.value, aliasValue.value.trim())
+    message.success('别名已保存')
+    aliasModal.value = false
+    const d = await fetchChats()
+    channels.value = d.items || []
+  } catch { message.error('保存失败') }
+  aliasSaving.value = false
+}
+
 const channelColumns = [
-  { title: '名称', key: 'chat_name', ellipsis: { tooltip: true } },
+  { title: '名称', key: 'chat_name', width: 180, render: (r: any) => {
+    const name = r.alias || r.chat_name || String(r.chat_id)
+    return h('span', [
+      h('span', name),
+      r.alias ? h(NText, { depth: '3', style: 'font-size:10px;margin-left:4px' }, { default: () => '[' + (r.chat_name || String(r.chat_id)) + ']' }) : null,
+    ])
+  }},
   { title: '类型', key: 'chat_type', width: 80, render: (r: any) => r.chat_type === 'channel' ? '频道' : r.chat_type === 'supergroup' ? '群组' : r.chat_type },
   { title: 'Chat ID', key: 'chat_id', width: 170, render: (r: any) => h(NText, { depth: '3', style: 'font-family:monospace;font-size:12px' }, { default: () => String(r.chat_id) }) },
+  {
+    title: '备注', key: 'alias', width: 80,
+    render: (r: any) => h(NButton, { size: 'tiny', onClick: () => openAlias(r) }, { default: () => r.alias ? '已备注' : '添加' }),
+  },
 ]
 
 function diagLevel(type: string): 'success' | 'error' | 'warning' | 'info' {
@@ -185,5 +218,16 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })
         </n-space>
       </n-card>
     </n-spin>
+
+    <n-modal v-model:show="aliasModal" title="设置频道备注" style="width: 400px">
+      <n-card>
+        <n-text depth="3" style="font-size:12px;display:block;margin-bottom:8px">为 Chat ID {{ aliasChatId }} 设置一个便于识别的备注名，原名称保持不变</n-text>
+        <n-input v-model:value="aliasValue" placeholder="例如：主频道、备用群" />
+        <n-space justify="end" style="margin-top: 12px">
+          <n-button @click="aliasModal = false">取消</n-button>
+          <n-button type="primary" :loading="aliasSaving" @click="saveAlias">保存</n-button>
+        </n-space>
+      </n-card>
+    </n-modal>
   </PageContainer>
 </template>

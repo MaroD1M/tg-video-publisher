@@ -11,7 +11,6 @@ from app.database.models import (
     Schedule, ScheduleItem, PublishLog, TargetChat,
     ItemStatus, QueueStrategy,
 )
-from app.modules.publisher import publish_video
 from app.modules.thumbnails import generate_thumbnail
 from app.utils.helpers import get_setting
 from app.utils.cron_preview import get_next_run_times
@@ -27,6 +26,16 @@ async def _get_chat_name(chat_id, db: AsyncSession) -> str:
         return tc.chat_name if tc else str(chat_id)
     except Exception:
         return str(chat_id) if chat_id else "-"
+
+
+async def _get_chat_alias(chat_id, db: AsyncSession) -> str | None:
+    if chat_id is None:
+        return None
+    try:
+        tc = await db.get(TargetChat, chat_id)
+        return tc.alias if tc else None
+    except Exception:
+        return None
 
 
 @router.get("/cron/preview")
@@ -52,6 +61,7 @@ async def list_schedules(db: AsyncSession = Depends(get_db)):
             "name": s.name,
             "target_chat_id": s.target_chat_id,
             "target_chat_name": await _get_chat_name(s.target_chat_id, db),
+            "target_chat_alias": await _get_chat_alias(s.target_chat_id, db),
             "cron_expr": s.cron_expr,
             "queue_strategy": s.queue_strategy.value if s.queue_strategy else "sequential",
             "enabled": s.enabled,
@@ -145,9 +155,18 @@ async def get_schedule_items(schedule_id: int, db: AsyncSession = Depends(get_db
         .order_by(ScheduleItem.sort_order)
     )).scalars().all()
 
+    # Batch load videos
+    video_ids = [r.video_id for r in rows]
+    videos = {}
+    if video_ids:
+        vids = (await db.execute(
+            select(Video).where(Video.id.in_(video_ids))
+        )).scalars().all()
+        videos = {v.id: v for v in vids}
+
     items = []
     for r in rows:
-        video = await db.get(Video, r.video_id)
+        video = videos.get(r.video_id)
         items.append({
             "id": r.id,
             "video_id": r.video_id,
@@ -267,7 +286,7 @@ async def _publish_next_from_schedule(schedule: Schedule, db: AsyncSession) -> d
     tid = await enqueue_publish(
         video_id=video.id,
         channel_id=schedule.target_chat_id,
-        channel_name=str(schedule.target_chat_id),
+        channel_name=channel_name,
         schedule_id=schedule.id,
     )
 

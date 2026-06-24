@@ -72,7 +72,7 @@ const channels = ref<any[]>([])
 const channelsLoading = ref(false)
 
 const channelColumns = [
-  { title: '名称', key: 'chat_name', ellipsis: { tooltip: true } },
+  { title: '名称', key: 'chat_name', ellipsis: { tooltip: true }, render: (r: any) => r.alias ? `${r.alias} [${r.chat_name || r.chat_id}]` : (r.chat_name || String(r.chat_id)) },
   { title: '类型', key: 'chat_type', width: 80, render: (r: any) => r.chat_type === 'channel' ? '频道' : r.chat_type === 'supergroup' ? '群组' : r.chat_type },
   { title: 'Chat ID', key: 'chat_id', width: 170, render: (r: any) => h(NText, { depth: '3', style: 'font-family:monospace;font-size:12px' }, { default: () => String(r.chat_id) }) },
   { title: '讨论组 ID', key: 'linked_chat_id', width: 150, render: (r: any) => r.linked_chat_id ? h(NText, { depth: '3', style: 'font-family:monospace;font-size:12px' }, { default: () => String(r.linked_chat_id) }) : h(NText, { depth: '3' }, { default: () => '—' }) },
@@ -138,7 +138,7 @@ async function doAddChat() {
   if (!manualChatId.value) { message.error('请输入 Chat ID'); return }
   try {
     const d = await verifyChat(parseInt(manualChatId.value))
-    if (d.ok) { message.success('已添加: ' + d.chat_name); manualChatId.value = ''; loadChannels() }
+    if (d.ok) { message.success('已添加: ' + (d.alias || d.chat_name)); manualChatId.value = ''; loadChannels() }
     else message.error(d.error || '验证失败')
   } catch { message.error('验证失败') }
 }

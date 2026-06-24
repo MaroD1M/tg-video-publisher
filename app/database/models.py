@@ -101,6 +101,7 @@ class CompressJob(Base):
     progress = Column(Float, default=0)
     status = Column(SAEnum(JobStatus), default=JobStatus.queued)
     error_log = Column(Text, nullable=True)
+    step_log = Column(Text, nullable=True)
     started_at = Column(DateTime, nullable=True)
     finished_at = Column(DateTime, nullable=True)
 
@@ -131,6 +132,7 @@ class TargetChat(Base):
     chat_id = Column(BigInteger, nullable=False, unique=True)
     chat_name = Column(String(256))
     chat_type = Column(String(32))
+    alias = Column(String(256), nullable=True)
     linked_chat_id = Column(BigInteger, nullable=True)
     is_active = Column(Boolean, default=True)
     verified_at = Column(DateTime, nullable=True)

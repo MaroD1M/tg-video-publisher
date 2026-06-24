@@ -253,6 +253,9 @@ async def run_compress_job(
                         retry_path.rename(output_path)
                     else:
                         retry_path.unlink()
+            else:
+                # Retry failed — keep original output even if oversized
+                stderr_text += f"\n[Retry pass failed; output may exceed target size ({output_size/1e6:.1f}MB > {target_size_mb}MB)]"
     else:
         output_size = 0
 
