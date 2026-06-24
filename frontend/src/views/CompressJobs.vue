@@ -137,6 +137,7 @@ function connectWS() {
         eta_sec: msg.eta_sec || 0, elapsed_sec: 0, speed: 0, fps: 0,
         stderr: '', error_log: '', thumbnail_id: msg.thumbnail_id || null, skip_reason: '',
         phase: msg.phase || 'encoding', step_log: [],
+        target_size_mb: 0, finished_at: '', is_published: false,
       })
       }
     } else if (msg.type === 'progress') {
