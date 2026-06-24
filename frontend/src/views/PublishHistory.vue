@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, h } from 'vue'
-import { NEmpty, NCard, NDataTable, NTag, NText, NSpin, NInput, NSelect, NSpace, NButton, NDatePicker, NPopconfirm, useMessage } from 'naive-ui'
+import { NEmpty, NCard, NDataTable, NTag, NText, NSpin, NInput, NSelect, NSpace, NButton, NDatePicker, NImage, NPopconfirm, useMessage } from 'naive-ui'
 import { fetchLogsWithFilters, fetchChats, retryPublishTask, getThumbnailImage, deletePublishLog } from '@/api/client'
 import PageHeader from '@/components/shared/PageHeader.vue'
 import PageContainer from '@/components/shared/PageContainer.vue'
@@ -23,7 +23,7 @@ const columns = [
   { title: '文件名', key: 'filename', ellipsis: { tooltip: true }, render: (r: any) => {
     if (r.thumbnail_id) {
       return         h('span', { class: 'thumb-blur', style: 'display:inline-flex;align-items:center;gap:6px' }, [
-        h('img', { src: getThumbnailImage(r.thumbnail_id), style: 'width:40px;height:23px;border-radius:3px;object-fit:cover;cursor:pointer;vertical-align:middle', title: '点击查看大图', onClick: () => window.open(getThumbnailImage(r.thumbnail_id), '_blank') }),
+        h(NImage, { src: getThumbnailImage(r.thumbnail_id), width: 40, height: 23, objectFit: 'cover', style: 'border-radius:3px;cursor:pointer;vertical-align:middle', previewDisabled: false, showToolbar: false }),
         h('span', r.filename),
       ])
     }
