@@ -8,9 +8,9 @@ _bot: Bot | None = None
 _bot_ready: bool = False
 
 _bot_request = HTTPXRequest(
-    connect_timeout=10,
-    write_timeout=3600,
-    read_timeout=7200,
+    connect_timeout=30,
+    write_timeout=None,
+    read_timeout=None,
     connection_pool_size=20,
     pool_timeout=15,
 )

@@ -31,7 +31,7 @@ if [ -n "${BOT_API_PROXY:-}" ]; then
   cat > /tmp/proxychains.conf << PROXYEOF
 strict_chain
 proxy_dns
-tcp_read_time_out 15000
+tcp_read_time_out 60000
 tcp_connect_time_out 8000
 [ProxyList]
 http ${PROXY_HOST} ${PROXY_PORT}

@@ -176,7 +176,7 @@ async def get_stats(db: AsyncSession = Depends(get_db)):
     try:
         from app.bot.client import ensure_bot
         bot_ok, bot_error, _ = await _asyncio.wait_for(
-            ensure_bot(), timeout=2
+            ensure_bot(), timeout=10
         )
     except _asyncio.TimeoutError:
         bot_ok = False

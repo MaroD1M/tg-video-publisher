@@ -103,7 +103,7 @@ async def generate_thumbnail(
         stderr=asyncio.subprocess.PIPE,
     )
     try:
-        _, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
+        _, stderr = await asyncio.wait_for(proc.communicate(), timeout=600)
     except asyncio.TimeoutError:
         proc.kill()
         await proc.wait()
