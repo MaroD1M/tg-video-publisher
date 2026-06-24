@@ -122,6 +122,13 @@ async def _execute_one(job_data: dict):
         thumb_elapsed = round(time.time() - thumb_start, 1)
         step_logs.append({"step":"thumbnail","elapsed":thumb_elapsed,"result":"done" if thumb_id_val else "skipped","thumb_id":thumb_id_val})
 
+        await broadcast({
+            "type": "progress", "job_id": job_id,
+            "percent": 0, "eta_sec": 0, "elapsed_sec": 0, "speed": 0, "fps": 0,
+            "phase": "encoding", "step_log": step_logs,
+            "thumbnail_id": thumb_id_val,
+        })
+
         # Phase 2: Run compression
         compress_start = time.time()
         result = await run_compress_job(
@@ -174,6 +181,15 @@ async def _execute_one(job_data: dict):
                     video.status = VideoStatus.failed
                 await db.commit()
 
+        # Broadcast final step_logs so frontend sees them immediately
+        await broadcast({
+            "type": "progress", "job_id": job_id,
+            "percent": 100, "eta_sec": 0, "elapsed_sec": 0, "speed": 0, "fps": 0,
+            "phase": st + "_done",
+            "step_log": step_logs,
+            "thumbnail_id": thumb_id_val,
+        })
+
         # Notify admin
         from app.modules.notifier import notify_admin
         if result["status"] == "done":
@@ -215,6 +231,13 @@ async def _execute_one(job_data: dict):
                 video.status = VideoStatus.failed
                 video.error_msg = str(e)
             await db.commit()
+
+        await broadcast({
+            "type": "progress", "job_id": job_id,
+            "percent": 0, "eta_sec": 0, "elapsed_sec": 0, "speed": 0, "fps": 0,
+            "phase": "error",
+            "step_log": step_logs,
+        })
 
 
 async def start_worker():
@@ -554,6 +577,11 @@ async def delete_compress_job(job_id: int, db: AsyncSession = Depends(get_db)):
         raise HTTPException(404, "Job not found")
     if job.status == JobStatus.running:
         raise HTTPException(400, "Cannot delete running job, cancel it first")
+    # Reset video status if it was stuck in compressing
+    video = await db.get(Video, job.video_id)
+    if video and video.status in (VideoStatus.compressing, VideoStatus.compressed, VideoStatus.skipped, VideoStatus.failed):
+        video.status = VideoStatus.pending
+        video.error_msg = None
     await db.delete(job)
     await db.commit()
     return {"ok": True}

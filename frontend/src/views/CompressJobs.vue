@@ -21,6 +21,7 @@ const pendingVideos = ref<any[]>([])
 const pendingLoading = ref(false)
 const pendingConfig = ref<Record<number, { preset: string; target_size_mb: number; width: number; height: number }>>({})
 const resCache = ref<Record<number, string>>({})
+const defaultPreset = ref('balanced')
 
 async function initPendingVideos() {
   const ids = route.query.ids as string
@@ -31,7 +32,7 @@ async function initPendingVideos() {
     const idSet = new Set(ids.split(',').map(Number))
     pendingVideos.value = (data.items || []).filter((v: any) => idSet.has(v.id))
     for (const v of pendingVideos.value) {
-      pendingConfig.value[v.id] = { preset: 'balanced', target_size_mb: 500, width: 0, height: 0 }
+      pendingConfig.value[v.id] = { preset: defaultPreset.value, target_size_mb: 500, width: 0, height: 0 }
     }
   } catch {}
   pendingLoading.value = false
@@ -39,7 +40,7 @@ async function initPendingVideos() {
 
 function updatePendingConfig(vid: number, key: string, val: any) {
   if (!pendingConfig.value[vid]) {
-    pendingConfig.value[vid] = { preset: 'balanced', target_size_mb: 500, width: 0, height: 0 }
+    pendingConfig.value[vid] = { preset: defaultPreset.value, target_size_mb: 500, width: 0, height: 0 }
   }
   const cfg: any = pendingConfig.value[vid]
   cfg[key] = val
@@ -124,7 +125,9 @@ function connectWS() {
   ws.value.onmessage = (e) => {
     const msg = JSON.parse(e.data)
     if (msg.type === 'job_start') {
-      jobs.value.unshift({
+      const existing = jobs.value.find((j) => j.id === msg.job_id)
+      if (!existing) {
+        jobs.value.unshift({
         id: msg.job_id, video_id: 0, video_name: msg.video,
         preset: msg.preset || 'balanced', status: 'running', progress: 0,
         output_size_bytes: 0, original_size_bytes: msg.original_size || 0,
@@ -132,6 +135,7 @@ function connectWS() {
         stderr: '', error_log: '', thumbnail_id: msg.thumbnail_id || null, skip_reason: '',
         phase: msg.phase || 'encoding', step_log: [],
       })
+      }
     } else if (msg.type === 'progress') {
       const job = jobs.value.find((j) => j.id === msg.job_id)
       if (job) {
@@ -139,6 +143,8 @@ function connectWS() {
         job.elapsed_sec = msg.elapsed_sec || 0; job.speed = msg.speed || 0; job.fps = msg.fps || 0
         job.status = 'running'
         if (msg.phase) job.phase = msg.phase
+        if (msg.step_log) job.step_log = msg.step_log
+        if (msg.thumbnail_id) job.thumbnail_id = msg.thumbnail_id
       }
     } else if (msg.type === 'job_done') {
       const job = jobs.value.find((j) => j.id === msg.job_id)
@@ -161,6 +167,10 @@ function connectWS() {
 }
 
 onMounted(async () => {
+  try {
+    const { data } = await api.get('/settings')
+    if (data?.compress_preset) defaultPreset.value = data.compress_preset
+  } catch {}
   load()
   connectWS()
   initPendingVideos()
@@ -229,7 +239,7 @@ const retryConfig = ref<Record<number, { preset: string; target_size_mb: number 
 
 function initRetryConfig(job: Job) {
   if (!retryConfig.value[job.id]) {
-    retryConfig.value[job.id] = { preset: job.preset || 'balanced', target_size_mb: 500 }
+    retryConfig.value[job.id] = { preset: job.preset || defaultPreset.value, target_size_mb: 500 }
   }
 }
 

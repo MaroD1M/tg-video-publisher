@@ -222,6 +222,15 @@ async function doDeleteAllCompleted() {
   load()
 }
 
+async function doDeleteAllFailed() {
+  const failed = tasks.value.filter(t => t.status === 'failed')
+  for (const t of failed) {
+    try { await deletePublishTask(t.id) } catch {}
+  }
+  message.success(`已删除 ${failed.length} 个任务`)
+  load()
+}
+
 const activeTasks = computed(() => tasks.value.filter(t => t.status === 'queued' || t.status === 'running' || t.status === 'uploading'))
 const completedTasks = computed(() => tasks.value.filter(t => t.status === 'done' || t.status === 'failed' || t.status === 'cancelled'))
 
@@ -343,6 +352,10 @@ onUnmounted(() => {
         <n-popconfirm @positive-click="doDeleteAllCompleted" positive-text="确定" negative-text="取消">
           <template #trigger><n-button size="tiny" type="error">删除已完成</n-button></template>
           确定删除所有已完成任务？
+        </n-popconfirm>
+        <n-popconfirm @positive-click="doDeleteAllFailed" positive-text="确定" negative-text="取消">
+          <template #trigger><n-button size="tiny" type="warning">删除所有失败</n-button></template>
+          确定删除所有失败任务？
         </n-popconfirm>
       </n-space>
     </div>

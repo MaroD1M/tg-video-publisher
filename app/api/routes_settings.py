@@ -262,7 +262,9 @@ async def refresh_chats():
 @router.put("/chats/{chat_id}/alias")
 async def set_chat_alias(chat_id: int, body: dict, db: AsyncSession = Depends(get_db)):
     from app.database.models import TargetChat
-    tc = await db.get(TargetChat, chat_id)
+    tc = (await db.execute(
+        select(TargetChat).where(TargetChat.chat_id == chat_id)
+    )).scalar_one_or_none()
     if not tc:
         raise HTTPException(404, "Chat not found")
     tc.alias = body.get("alias", "") or None
