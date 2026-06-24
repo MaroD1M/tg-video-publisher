@@ -65,7 +65,6 @@ async def generate_thumbnail(
     thumb_h = 360
 
     filter_parts = []
-    filter_parts.append(f"trim=start={effective_start}:end={effective_end},setpts=PTS-STARTPTS")
     filter_parts.append(f"fps={fps_value:.4f}")
 
     if add_timestamp:
@@ -88,7 +87,10 @@ async def generate_thumbnail(
 
     cmd = [
         get_ffmpeg_path(), "-y",
+        "-ss", str(effective_start),
+        "-copyts",
         "-i", input_path,
+        "-t", str(effective_duration),
         "-vf", filter_str,
         "-frames:v", "1",
         "-q:v", "2",
