@@ -174,4 +174,4 @@ async def _ensure_thumb_impl(video, video_path: str, db) -> str:
                          width=result["width"], height=result["height"], size_bytes=result["size_bytes"]))
         await db.commit()
         return thumb_path
-    return ""
+    raise Exception(f"Thumbnail generation failed: {result.get('error', 'Unknown error')}")

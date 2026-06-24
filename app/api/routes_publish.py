@@ -101,6 +101,8 @@ async def _execute_publish(task_id: int):
                 raise Exception("Video not found")
             vpath, vsize = await resolve_video_path(video_obj)
             thumb_path = await ensure_thumbnail(video_obj, vpath, db)
+            if not thumb_path:
+                raise Exception("缩略图生成失败，请检查视频文件是否完整或手动重试")
             size_bytes = video_obj.size_bytes
 
             thumb_row = (await db.execute(

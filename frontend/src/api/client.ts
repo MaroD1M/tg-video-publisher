@@ -264,6 +264,11 @@ export async function regenerateThumbnail(thumbId: number) {
   return data
 }
 
+export async function generateThumbnail(videoId: number, layout?: string) {
+  const { data } = await api.post('/thumbnails/generate', null, { params: { video_id: videoId, layout: layout || '3x3' } })
+  return data
+}
+
 export async function deleteCompressJob(jobId: number) {
   const { data } = await api.delete(`/compress/${jobId}`)
   return data

@@ -84,7 +84,7 @@ async def discover_chats(refresh_names: bool = False) -> list[dict]:
                 try:
                     full = await bot.get_chat(chat_info["chat_id"])
                     await _save_chat(_chat_to_dict(full))
-                except TelegramError:
+                except Exception:
                     pass
 
         try:
@@ -106,9 +106,9 @@ async def discover_chats(refresh_names: bool = False) -> list[dict]:
                         info = _chat_to_dict(full)
                         chats.append(info)
                         await _save_chat(info)
-                    except TelegramError:
+                    except Exception:
                         pass
-        except TelegramError:
+        except Exception:
             pass
 
     return chats

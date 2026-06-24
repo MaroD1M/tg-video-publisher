@@ -33,6 +33,8 @@ function dedupedToast(type: 'success'|'error', videoName: string, msg: string) {
 async function initPending() {
   const ids = route.query.ids as string
   if (!ids) return
+  const cid = route.query.channel_id as string
+  if (cid) pendingChannelId.value = Number(cid)
   try {
     const { data } = await api.get('/videos', { params: { page_size: 100 } })
     const idSet = new Set(ids.split(',').map(Number))

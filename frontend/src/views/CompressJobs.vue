@@ -1,18 +1,19 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, h, computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import {
   NCard, NProgress, NTag, NText, NEmpty, NSpace, NButton, NInputNumber,
   NPopconfirm, NImage, NGrid, NGi, NStatistic, NSelect, NSlider, NIcon, useMessage
 } from 'naive-ui'
 import { TimeOutline } from '@vicons/ionicons5'
-import { fetchCompressJobs, cancelCompressJob, pauseJob, resumeJob, retryCompressJob, getThumbnailImage, publishNow, fetchChats, deleteCompressJob, batchDeleteCompress, submitCompress, updateCompressSettings } from '@/api/client'
+import { fetchCompressJobs, cancelCompressJob, pauseJob, resumeJob, retryCompressJob, getThumbnailImage, publishNow, fetchChats, deleteCompressJob, batchDeleteCompress, submitCompress, updateCompressSettings, generateThumbnail } from '@/api/client'
 import api from '@/api/client'
 import PageHeader from '@/components/shared/PageHeader.vue'
 import PageContainer from '@/components/shared/PageContainer.vue'
 
 const message = useMessage()
 const route = useRoute()
+const router = useRouter()
 const showCompleted = ref(false)
 const expandedJobId = ref<number | null>(null)
 
@@ -32,7 +33,7 @@ async function initPendingVideos() {
     const idSet = new Set(ids.split(',').map(Number))
     pendingVideos.value = (data.items || []).filter((v: any) => idSet.has(v.id))
     for (const v of pendingVideos.value) {
-      pendingConfig.value[v.id] = { preset: defaultPreset.value, target_size_mb: 500, width: 0, height: 0 }
+      pendingConfig.value[v.id] = { preset: defaultPreset.value, target_size_mb: Math.min(Math.ceil((v.size_bytes || 0) / 1_000_000), 500) || 500, width: 0, height: 0 }
     }
   } catch {}
   pendingLoading.value = false
@@ -40,7 +41,9 @@ async function initPendingVideos() {
 
 function updatePendingConfig(vid: number, key: string, val: any) {
   if (!pendingConfig.value[vid]) {
-    pendingConfig.value[vid] = { preset: defaultPreset.value, target_size_mb: 500, width: 0, height: 0 }
+    const v = pendingVideos.value.find(p => p.id === vid)
+    const mb = v ? Math.min(Math.ceil((v.size_bytes || 0) / 1_000_000), 500) || 500 : 500
+    pendingConfig.value[vid] = { preset: defaultPreset.value, target_size_mb: mb, width: 0, height: 0 }
   }
   const cfg: any = pendingConfig.value[vid]
   cfg[key] = val
@@ -51,7 +54,11 @@ async function confirmPending(vid: number) {
   if (!cfg) return
   message.loading('创建压缩任务...')
   try {
-    await submitCompress([vid], cfg.preset, cfg.target_size_mb, cfg.width, cfg.height)
+    const r = await submitCompress([vid], cfg.preset, cfg.target_size_mb, cfg.width, cfg.height)
+    if ((r.jobs || []).length === 0) {
+      message.warning('该视频已在压缩中或已压缩，无法重复添加')
+      return
+    }
     pendingVideos.value = pendingVideos.value.filter(v => v.id !== vid)
     message.success(`压缩任务已创建`)
     load()
@@ -77,7 +84,9 @@ async function batchSetAll(key: string, val: any) {
 }
 
 function toggleExpand(jobId: number) {
-  expandedJobId.value = expandedJobId.value === jobId ? null : jobId
+  const next = expandedJobId.value === jobId ? null : jobId
+  expandedJobId.value = next
+  router.replace({ query: { ...route.query, ...(next ? { expanded: String(next) } : {}) } })
 }
 
 interface Job {
@@ -175,6 +184,8 @@ onMounted(async () => {
     const { data } = await api.get('/settings')
     if (data?.compress_preset) defaultPreset.value = data.compress_preset
   } catch {}
+  const ex = route.query.expanded as string
+  if (ex) expandedJobId.value = Number(ex)
   load()
   connectWS()
   initPendingVideos()
@@ -227,8 +238,12 @@ async function doCancel(jobId: number) {
   try { await cancelCompressJob(jobId); message.success('已取消') } catch { message.error('取消失败') }
 }
 
-async function doPause(jobId: number) {
-  try { await pauseJob(jobId); message.success('已暂停') } catch { message.error('暂停失败') }
+async function doGenerateThumb(videoId: number) {
+  try {
+    const r = await generateThumbnail(videoId)
+    message.success(`缩略图已生成 (${r.width}×${r.height})`)
+    load()
+  } catch { message.error('生成缩略图失败') }
 }
 
 async function doResume(jobId: number) {
@@ -465,6 +480,7 @@ async function load() {
                 <n-button v-if="job.status === 'done' || job.status === 'skipped'" size="tiny" @click.stop="doPublish(job)">发布</n-button>
                 <n-button v-if="job.status === 'failed' || job.status === 'cancelled'" size="tiny" @click.stop="doPublish(job)">发布</n-button>
                 <n-button v-if="job.status === 'failed' || job.status === 'skipped' || job.status === 'cancelled'" size="tiny" type="primary" @click.stop="doRetryWithConfig(job)">重试</n-button>
+                <n-button v-if="(job.status === 'done' || job.status === 'skipped') && !job.thumbnail_id" size="tiny" @click.stop="doGenerateThumb(job.video_id)">🖼 生成缩略图</n-button>
                 <n-popconfirm @positive-click="() => doDeleteJob(job.id)">
                   <template #trigger><n-button size="tiny" type="error" @click.stop>删除</n-button></template>
                   <template #action><n-button size="tiny" type="error" @click="() => doDeleteJob(job.id)">确定</n-button><n-button size="tiny" style="margin-left:8px">取消</n-button></template>

@@ -263,8 +263,9 @@ async def start_worker():
                         video.status = VideoStatus.failed
                         video.error_msg = "Compression interrupted (container restarted)"
                 await db.commit()
-        except Exception:
-            pass
+        except Exception as e:
+            import logging
+            logging.getLogger("tgvp.worker").error(f"Failed to reset stuck jobs on startup: {e}")
 
         max_w = 1
         try:
@@ -318,7 +319,7 @@ async def submit_compress(
         await job_queue.put(j)
 
     await start_worker()
-    return {"ok": True, "jobs": jobs}
+    return {"ok": True, "jobs": jobs, "skipped": len(data.video_ids) - len(jobs)}
 
 
 @router.get("/compress")
