@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { NCard, NText, NButton, NSpace, NGrid, NGi, NStatistic, NPopconfirm, NEmpty, useMessage } from 'naive-ui'
+import { NCard, NText, NButton, NGrid, NGi, NStatistic, NPopconfirm, NEmpty, useMessage } from 'naive-ui'
 import { fetchDiskCleanup, executeDiskCleanup } from '@/api/client'
 import PageHeader from '@/components/shared/PageHeader.vue'
 import PageContainer from '@/components/shared/PageContainer.vue'
@@ -60,6 +60,7 @@ onMounted(load)
 
     <n-empty v-if="!loading && !data" description="无法获取磁盘信息" style="margin-top: 80px" />
 
+    <template v-if="data">
     <!-- Orphan outputs -->
     <n-card size="small" title="🗑 未被引用的压缩文件" style="margin-bottom: 16px">
       <n-text depth="3" style="font-size:11px;display:block;margin-bottom:8px">文件存在于输出目录，但在压缩任务中已无对应记录，可安全删除</n-text>
@@ -145,5 +146,6 @@ onMounted(load)
         确定清理 Bot API 缓存？此操作可能导致 Bot API 重新登录
       </n-popconfirm>
     </n-card>
+    </template>
   </PageContainer>
 </template>

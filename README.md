@@ -70,6 +70,8 @@ services:
       - "8080:8080"
     volumes:
       - /volume1/videos:/data/videos:ro
+      # 如需多个视频源目录，添加更多只读映射
+      # - /volume2/movies:/data/movies:ro
       - /volume1/docker/tg-publisher/output:/data/output
       - /volume1/docker/tg-publisher/thumbnails:/data/thumbnails
       - /volume1/docker/tg-publisher/config:/app/config
@@ -145,6 +147,21 @@ BOT_API_PROXY=http://192.168.1.100:7890
 <summary><b>支持 GPU 加速吗？</b></summary>
 
 启动时自动检测：NVIDIA NVENC → Intel QSV → VAAPI。检测到后优先使用硬件编码器。无 GPU 时回退到 CPU（已为群晖 N100 优化）。
+</details>
+
+<details>
+<summary><b>如何配置多个视频源目录？</b></summary>
+
+1. 在 `docker-compose.yml` 中添加额外挂载，例如：
+   ```yaml
+   volumes:
+     - /volume1/videos:/data/videos:ro
+     - /volume2/movies:/data/movies:ro
+     - /volume3/tv:/data/tv:ro
+   ```
+2. `docker compose up -d` 重启容器
+3. 打开 Web UI → **系统设置** → **常规** → 在目录配置中添加对应路径（如 `/data/movies`、`/data/tv`）
+4. 回到 **视频管理** 页面，通过顶部下拉菜单切换目录
 </details>
 
 <details>

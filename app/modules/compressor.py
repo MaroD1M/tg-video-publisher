@@ -189,88 +189,87 @@ async def run_compress_job(
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / output_filename
 
-    await broadcast({
-        "type": "job_start", "job_id": job_id,
-        "video": Path(input_path).name,
-        "preset": preset.value, "original_size": size_bytes,
-        "thumbnail_id": thumbnail_id,
-        "phase": "encoding",
-    })
+    try:
+        await broadcast({
+            "type": "job_start", "job_id": job_id,
+            "video": Path(input_path).name,
+            "preset": preset.value, "original_size": size_bytes,
+            "thumbnail_id": thumbnail_id,
+            "phase": "encoding",
+        })
 
-    start_time = time.time()
+        start_time = time.time()
 
-    cmd = build_ffmpeg_args(input_path, str(output_path), duration_sec, preset, target_size_mb, target_width, target_height)
-    code, _, stderr_text = await _run_ffmpeg(cmd, duration_sec, job_id, 100, start_time)
+        cmd = build_ffmpeg_args(input_path, str(output_path), duration_sec, preset, target_size_mb, target_width, target_height)
+        code, _, stderr_text = await _run_ffmpeg(cmd, duration_sec, job_id, 100, start_time)
 
-    cancel_ev = cancel_events.get(job_id)
-    if cancel_ev and cancel_ev.is_set():
+        cancel_ev = cancel_events.get(job_id)
+        if cancel_ev and cancel_ev.is_set():
+            if output_path.exists():
+                output_path.unlink()
+            await broadcast({"type": "job_error", "job_id": job_id, "error": "Cancelled by user"})
+            return {"status": "cancelled", "output_size": 0, "output_path": "", "stderr": stderr_text}
+
+        if code != 0:
+            await broadcast({"type": "job_error", "job_id": job_id, "error": stderr_text[:500]})
+            return {"status": "failed", "output_size": 0, "output_path": "", "error": stderr_text[:500], "stderr": stderr_text}
+
+        # Phase 2: Check size — retry with aggressive settings if needed (20% tolerance)
         if output_path.exists():
-            output_path.unlink()
-        await broadcast({"type": "job_error", "job_id": job_id, "error": "Cancelled by user"})
-        _cleanup_job(job_id)
-        return {"status": "cancelled", "output_size": 0, "output_path": "", "stderr": stderr_text}
-
-    if code != 0:
-        await broadcast({"type": "job_error", "job_id": job_id, "error": stderr_text[:500]})
-        _cleanup_job(job_id)
-        return {"status": "failed", "output_size": 0, "output_path": "", "error": stderr_text[:500], "stderr": stderr_text}
-
-    # Phase 2: Check size — retry with aggressive settings if needed (20% tolerance)
-    if output_path.exists():
-        output_size = output_path.stat().st_size
-        target_bytes = target_size_mb * 1_000_000
-        if output_size > target_bytes * 1.2:  # 20% tolerance
-            await broadcast({
-                "type": "progress", "job_id": job_id,
-                "percent": 100, "eta_sec": 0, "phase": "retry_pass2",
-                "elapsed_sec": round(time.time() - start_time),
-                "speed": 0, "fps": 0,
-            })
-            retry_path = output_dir / f"retry_{output_filename}"
-            cmd_retry = [
-                get_ffmpeg_path(), "-y", "-i", input_path,
-                "-c:v", "libx265", "-crf", "28", "-preset", "veryfast",
-                "-vf", f"scale='min({target_width or 1280},iw)':min({target_height or 720},ih):force_original_aspect_ratio=decrease",
-                "-c:a", "aac", "-b:a", "96k", "-movflags", "+faststart",
-                str(retry_path),
-            ]
-            code2, _, _ = await _run_ffmpeg(cmd_retry, duration_sec, job_id, 100, start_time, "retry_pass2")
-            cancel_ev = cancel_events.get(job_id)
-            if cancel_ev and cancel_ev.is_set():
-                if retry_path.exists(): retry_path.unlink()
-                _cleanup_job(job_id)
-                return {"status": "cancelled", "output_size": 0, "output_path": ""}
-            if code2 == 0 and retry_path.exists():
-                retry_size = retry_path.stat().st_size
-                if retry_size <= target_bytes * 1.2:
-                    output_path.unlink()
-                    retry_path.rename(output_path)
-                    output_size = retry_size
-                else:
-                    output_size = min(output_size, retry_size)
-                    if output_size == retry_size:
+            output_size = output_path.stat().st_size
+            target_bytes = target_size_mb * 1_000_000
+            if output_size > target_bytes * 1.2:  # 20% tolerance
+                await broadcast({
+                    "type": "progress", "job_id": job_id,
+                    "percent": 100, "eta_sec": 0, "phase": "retry_pass2",
+                    "elapsed_sec": round(time.time() - start_time),
+                    "speed": 0, "fps": 0,
+                })
+                retry_path = output_dir / f"retry_{output_filename}"
+                cmd_retry = [
+                    get_ffmpeg_path(), "-y", "-i", input_path,
+                    "-c:v", "libx265", "-crf", "28", "-preset", "veryfast",
+                    "-vf", f"scale='min({target_width or 1280},iw)':min({target_height or 720},ih):force_original_aspect_ratio=decrease",
+                    "-c:a", "aac", "-b:a", "96k", "-movflags", "+faststart",
+                    str(retry_path),
+                ]
+                code2, _, _ = await _run_ffmpeg(cmd_retry, duration_sec, job_id, 100, start_time, "retry_pass2")
+                cancel_ev = cancel_events.get(job_id)
+                if cancel_ev and cancel_ev.is_set():
+                    if retry_path.exists(): retry_path.unlink()
+                    return {"status": "cancelled", "output_size": 0, "output_path": ""}
+                if code2 == 0 and retry_path.exists():
+                    retry_size = retry_path.stat().st_size
+                    if retry_size <= target_bytes * 1.2:
                         output_path.unlink()
                         retry_path.rename(output_path)
+                        output_size = retry_size
                     else:
-                        retry_path.unlink()
-            else:
-                # Retry failed — keep original output even if oversized
-                stderr_text += f"\n[Retry pass failed; output may exceed target size ({output_size/1e6:.1f}MB > {target_size_mb}MB)]"
-    else:
-        output_size = 0
+                        output_size = min(output_size, retry_size)
+                        if output_size == retry_size:
+                            output_path.unlink()
+                            retry_path.rename(output_path)
+                        else:
+                            retry_path.unlink()
+                else:
+                    # Retry failed — keep original output even if oversized
+                    stderr_text += f"\n[Retry pass failed; output may exceed target size ({output_size/1e6:.1f}MB > {target_size_mb}MB)]"
+        else:
+            output_size = 0
 
-    # Cleanup
-    log_file = Path(str(output_path) + ".log")
-    if log_file.exists():
-        log_file.unlink()
+        # Cleanup
+        log_file = Path(str(output_path) + ".log")
+        if log_file.exists():
+            log_file.unlink()
 
-    await broadcast({
-        "type": "job_done", "job_id": job_id,
-        "output_size": output_size, "output_path": str(output_path),
-        "ratio": round((1 - output_size / size_bytes) * 100, 1) if size_bytes else 0,
-    })
-    _cleanup_job(job_id)
-    return {"status": "done", "output_size": output_size, "output_path": str(output_path), "stderr": stderr_text}
+        await broadcast({
+            "type": "job_done", "job_id": job_id,
+            "output_size": output_size, "output_path": str(output_path),
+            "ratio": round((1 - output_size / size_bytes) * 100, 1) if size_bytes else 0,
+        })
+        return {"status": "done", "output_size": output_size, "output_path": str(output_path), "stderr": stderr_text}
+    finally:
+        _cleanup_job(job_id)
 
 
 async def _run_ffmpeg(

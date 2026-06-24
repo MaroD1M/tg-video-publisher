@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, Query, HTTPException
 from typing import Optional
-from datetime import datetime, timedelta
+from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func
 
 from app.database.connection import get_db
 from app.database.models import PublishLog, Video, TargetChat, Thumbnail, CompressJob, JobStatus

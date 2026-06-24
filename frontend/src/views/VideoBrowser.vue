@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, h } from 'vue'
+import { ref, onMounted, computed, h } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   NCard, NInput, NButton, NDataTable, NSpace,
@@ -8,13 +8,24 @@ import {
   NPopconfirm, NPopover, NSelect, useMessage,
 } from 'naive-ui'
 import { ScanOutline } from '@vicons/ionicons5'
-import { fetchVideos, scanDirectory, deleteVideo, fetchChats, publishNow, cancelPublishTask, retryPublishTask } from '@/api/client'
-import api from '@/api/client'
+import { fetchVideos, scanDirectory, deleteVideo, publishNow, cancelPublishTask, retryPublishTask } from '@/api/client'
+import { useSettingsStore } from '@/stores/settings'
+import { useTaskStore } from '@/stores/tasks'
+import { useWebSocket } from '@/composables/useWebSocket'
+import { useChannels } from '@/composables/useChannels'
+import { formatSize, formatDuration, formatChannelLabel } from '@/utils/format'
+import type { Video } from '@/types'
 import PageHeader from '@/components/shared/PageHeader.vue'
 import PageContainer from '@/components/shared/PageContainer.vue'
+import StatusTag from '@/components/shared/StatusTag.vue'
+import ChannelSelect from '@/components/shared/ChannelSelect.vue'
 
 const message = useMessage()
 const router = useRouter()
+
+const settingsStore = useSettingsStore()
+const taskStore = useTaskStore()
+const { channels, channelOptions, load: loadChannels } = useChannels()
 
 function navigateTo(path: string) {
   const ids = Array.from(selectedIds.value)
@@ -33,7 +44,9 @@ function unselectVideo(id: number) {
 }
 
 const currentPath = ref('/data/videos')
-const videos = ref<any[]>([])
+const videoSourceDirs = ref<string[]>(['/data/videos'])
+const selectedRootDir = ref('/data/videos')
+const videos = ref<Video[]>([])
 const loading = ref(false)
 const scanning = ref(false)
 const selectedIds = ref<Set<number>>(new Set())
@@ -53,14 +66,13 @@ const filteredVideos = computed(() => {
   }
   if (sortKey.value) {
     arr = [...arr].sort((a, b) => {
-      const va = a[sortKey.value] ?? ''; const vb = b[sortKey.value] ?? ''
-      const n = typeof va === 'number' ? va - vb : String(va).localeCompare(String(vb))
+      const va = a[sortKey.value as keyof Video] ?? ''; const vb = b[sortKey.value as keyof Video] ?? ''
+      const n = typeof va === 'number' ? (va as number) - (vb as number) : String(va).localeCompare(String(vb))
       return sortDir.value === 'asc' ? n : -n
     })
   }
   return arr
 })
-
 
 const breadcrumbs = computed(() => {
   const parts: { name: string; path: string }[] = []
@@ -73,8 +85,20 @@ const breadcrumbs = computed(() => {
   return parts
 })
 
+function switchRootDir(dir: string) {
+  selectedRootDir.value = dir
+  currentPath.value = dir
+  selectedIds.value = new Set()
+  loadVideos()
+}
+
 async function browseDir(path?: string) {
-  if (path !== undefined) currentPath.value = path
+  if (path !== undefined) {
+    if (!path.startsWith(selectedRootDir.value)) {
+      path = selectedRootDir.value
+    }
+    currentPath.value = path
+  }
   selectedIds.value = new Set()
   await loadVideos()
 }
@@ -105,18 +129,6 @@ function onFilterChange(val: string) {
   loadVideos()
 }
 
-function formatSize(bytes: number): string {
-  if (!bytes) return '-'
-  if (bytes < 1_000_000_000) return (bytes / 1_000_000).toFixed(1) + ' MB'
-  return (bytes / 1_000_000_000).toFixed(2) + ' GB'
-}
-
-function formatDuration(sec: number): string {
-  if (!sec) return '-'
-  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = Math.floor(sec % 60)
-  return h > 0 ? `${h}h${m}m` : `${m}m${s}s`
-}
-
 async function doPublishOne(videoId: number) {
   if (!publishChannel.value) { message.warning('请先在操作栏选择发布频道'); return }
   try {
@@ -137,30 +149,22 @@ async function doDeleteOne(videoId: number) {
 const columns = [
   { type: 'selection' as const },
   { title: '文件名', key: 'filename', ellipsis: { tooltip: true }, sorter: true },
-  { title: '大小', key: 'size_bytes', width: 100, render: (r: any) => formatSize(r.size_bytes), sorter: true },
-  { title: '时长', key: 'duration_sec', width: 90, render: (r: any) => formatDuration(r.duration_sec), sorter: true },
-  { title: '分辨率', key: 'resolution', width: 110, render: (r: any) => r.width ? `${r.width}x${r.height}` : '-', sorter: true },
-    {
-      title: '状态', key: 'status', width: 110,
-      render: (r: any) => {
-        const map: Record<string, { type: any; label: string }> = {
-          pending: { type: 'default', label: '待处理' },
-          compressed: { type: 'success', label: '已压缩' },
-          skipped: { type: 'info', label: '已跳过' },
-          compressing: { type: 'warning', label: '压缩中' },
-          failed: { type: 'error', label: '失败' },
-        }
-        const s = map[r.status] || { type: 'default', label: r.status }
-        const tags = [h(NTag, { type: s.type, size: 'small', bordered: false }, { default: () => s.label })]
-        if (r.is_published) {
-          tags.push(h(NTag, { type: 'success', size: 'small', bordered: false, style: 'margin-left:4px' }, { default: () => '📤 已发布' }))
-        }
-        return h(NSpace, { size: 'small' }, { default: () => tags })
-      },
+  { title: '大小', key: 'size_bytes', width: 100, render: (r: Video) => formatSize(r.size_bytes), sorter: true },
+  { title: '时长', key: 'duration_sec', width: 90, render: (r: Video) => formatDuration(r.duration_sec || 0), sorter: true },
+  { title: '分辨率', key: 'resolution', width: 110, render: (r: Video) => r.width ? `${r.width}x${r.height}` : '-', sorter: true },
+  {
+    title: '状态', key: 'status', width: 110,
+    render: (r: Video) => {
+      const tags = [h(StatusTag, { status: r.status })]
+      if (r.is_published) {
+        tags.push(h(NTag, { type: 'success', size: 'small', bordered: false, style: 'margin-left:4px' }, { default: () => '📤 已发布' }))
+      }
+      return h(NSpace, { size: 'small' }, { default: () => tags })
     },
+  },
   {
     title: '操作', key: 'actions', width: 100,
-    render: (r: any) => h(NSpace, { size: 'small' }, {
+    render: (r: Video) => h(NSpace, { size: 'small' }, {
       default: () => [
         h(NButton, { size: 'tiny', onClick: () => doPublishOne(r.id) }, { default: () => '发布' }),
         h(NPopconfirm, { onPositiveClick: () => doDeleteOne(r.id) },
@@ -171,68 +175,12 @@ const columns = [
   },
 ]
 
-const channels = ref<any[]>([])
 const publishChannel = ref<number | null>(null)
 
-async function loadChannels() {
-  try { const d = await fetchChats(); channels.value = (d.items || []).map((c: any) => ({ ...c, _label: (c.alias || c.chat_name)?.length > 16 ? (c.alias || c.chat_name).slice(0,14)+'…' : (c.alias || c.chat_name) })) } catch {}
-}
-
-const ws = ref<WebSocket | null>(null)
-let reconnectTimer: number | undefined
-let reconnectAttempts = 0
-
-interface ProgressJob {
-  id: number; video_name: string; status: string; progress: number; eta_sec: number
-  elapsed_sec: number; speed: number; fps: number; error: string
-}
-const runningJobs = ref<ProgressJob[]>([])
-
-interface PublishTask {
-  id: number; video_id: number | null; video_name: string; channel_name: string
-  status: string; progress: number; elapsed_sec: number; eta_sec: number
-  thumbnail_id: number | null; error: string
-}
-const publishTasks = ref<PublishTask[]>([])
-
-function connectWS() {
-  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
-  const token = localStorage.getItem('access_token')
-  ws.value = new WebSocket(`${protocol}//${location.host}/ws/compress?token=${token || ''}`)
-  ws.value.onmessage = (e) => {
-    const msg = JSON.parse(e.data)
-    const idx = runningJobs.value.findIndex(j => j.id === msg.job_id)
-    if (msg.type === 'job_start') {
-      if (idx < 0) runningJobs.value.push({ id: msg.job_id, video_name: msg.video, status: 'running', progress: 0, eta_sec: msg.eta_sec || 0, elapsed_sec: 0, speed: 0, fps: 0, error: '' })
-    } else if (msg.type === 'progress') {
-      if (idx >= 0) { runningJobs.value[idx].progress = msg.percent; runningJobs.value[idx].eta_sec = msg.eta_sec || 0; runningJobs.value[idx].elapsed_sec = msg.elapsed_sec || 0; runningJobs.value[idx].speed = msg.speed || 0; runningJobs.value[idx].fps = msg.fps || 0 }
-    } else if (msg.type === 'job_done') {
-      if (idx >= 0) { runningJobs.value[idx].status = 'done'; runningJobs.value[idx].progress = 100 }
-    } else if (msg.type === 'job_skip') {
-      if (idx >= 0) { runningJobs.value[idx].status = 'skipped'; runningJobs.value[idx].progress = 100 }
-    } else if (msg.type === 'job_error') {
-      if (idx >= 0) { runningJobs.value[idx].status = 'failed'; runningJobs.value[idx].error = msg.error || '' }
-    } else if (msg.type === 'publish_progress') {
-      let t = publishTasks.value.find(p => p.id === msg.task_id)
-      if (!t) { t = { id: msg.task_id, video_id: msg.video_id, video_name: msg.video_name, channel_name: msg.channel_name || '', status: 'running', progress: msg.progress || 5, elapsed_sec: msg.elapsed_sec || 0, eta_sec: msg.eta_sec || 0, thumbnail_id: msg.thumbnail_id || null, error: '' }; publishTasks.value.unshift(t) }
-      else { t.progress = msg.progress || t.progress; t.elapsed_sec = msg.elapsed_sec || 0; t.eta_sec = msg.eta_sec || 0; t.thumbnail_id = msg.thumbnail_id || t.thumbnail_id; t.status = msg.step === 'uploading' ? 'uploading' : 'running' }
-    } else if (msg.type === 'publish_done') {
-      const t = publishTasks.value.find(p => p.id === msg.task_id); if (t) { t.status = 'done'; t.progress = 100 }
-    } else if (msg.type === 'publish_error') {
-      const t = publishTasks.value.find(p => p.id === msg.task_id); if (t) { t.status = 'failed'; t.error = msg.error || '' }
-    } else if (msg.type === 'publish_cancelled') {
-      const t = publishTasks.value.find(p => p.id === msg.task_id); if (t) t.status = 'cancelled'
-    }
-  }
-  ws.value.onclose = () => { const delay = Math.min((reconnectAttempts || 1) * 5000, 60000); reconnectAttempts = (reconnectAttempts || 1) + 1; reconnectTimer = window.setTimeout(connectWS, delay) }
-  ws.value.onerror = () => { ws.value?.close() }
-  ws.value.onopen = () => { reconnectAttempts = 0 }
-}
-
-function clearProgress() {
-  runningJobs.value = runningJobs.value.filter(j => j.status === 'running')
-  publishTasks.value = publishTasks.value.filter(t => t.status === 'running' || t.status === 'uploading' || t.status === 'queued')
-}
+const { connect: connectWS } = useWebSocket(
+  '/ws/compress',
+  (e) => { try { taskStore.handleWSMessage(JSON.parse(e.data)) } catch {} }
+)
 
 async function cancelPublish(taskId: number) {
   try { await cancelPublishTask(taskId) } catch { message.error('取消失败') }
@@ -244,13 +192,21 @@ async function retryPublish(taskId: number) {
 onMounted(async () => {
   loadChannels()
   connectWS()
-  try { const { data } = await api.get('/settings'); if (data?.video_source_dir) currentPath.value = data.video_source_dir } catch {}
+  try {
+    const data = await settingsStore.loadSettings()
+    const dirs = data.video_source_dirs
+    if (dirs && dirs.length) {
+      videoSourceDirs.value = dirs
+      selectedRootDir.value = dirs[0]
+      currentPath.value = dirs[0]
+    }
+  } catch {}
   browseDir()
 })
 
-onUnmounted(() => { if (reconnectTimer) clearTimeout(reconnectTimer); ws.value?.close() })
-
-const hasActiveTasks = computed(() => runningJobs.value.length > 0 || publishTasks.value.length > 0)
+const hasActiveTasks = computed(() => taskStore.hasActive)
+const runningJobs = computed(() => taskStore.runningJobs)
+const publishTasks = computed(() => taskStore.publishTasks)
 </script>
 
 <template>
@@ -259,13 +215,23 @@ const hasActiveTasks = computed(() => runningJobs.value.length > 0 || publishTas
 
     <n-card size="small" style="margin-bottom: 12px">
       <n-space vertical :size="8">
+        <n-space :size="8" align="center" v-if="videoSourceDirs.length > 1">
+          <n-text depth="3" style="font-size: 12px; white-space: nowrap;">视频源：</n-text>
+          <n-select
+            v-model:value="selectedRootDir"
+            :options="videoSourceDirs.map((d: string) => ({ label: d, value: d }))"
+            size="small"
+            style="width: 220px"
+            @update:value="switchRootDir"
+          />
+        </n-space>
         <n-breadcrumb>
           <n-breadcrumb-item v-for="(crumb, i) in breadcrumbs" :key="crumb.path" @click="browseDir(crumb.path)">
             {{ i === 0 ? '📁' : '' }} {{ crumb.name }}
           </n-breadcrumb-item>
         </n-breadcrumb>
         <n-space :size="8">
-          <n-input v-model:value="currentPath" size="small" placeholder="/data/videos" style="flex: 1" clearable />
+          <n-input v-model:value="currentPath" size="small" :placeholder="selectedRootDir" style="flex: 1" clearable />
           <n-button size="small" @click="browseDir()">浏览</n-button>
           <n-button size="small" :loading="scanning" @click="doScan">
             <template #icon><n-icon><ScanOutline /></n-icon></template>扫描
@@ -291,7 +257,7 @@ const hasActiveTasks = computed(() => runningJobs.value.length > 0 || publishTas
         :columns="columns"
         :data="filteredVideos"
         :pagination="{ pageSize: 20 }"
-        :row-key="(r: any) => r.id"
+        :row-key="(r: Video) => r.id"
         :checked-row-keys="Array.from(selectedIds)"
         @update:checked-row-keys="(keys: number[]) => selectedIds = new Set(keys)"
         size="small"
@@ -324,7 +290,7 @@ const hasActiveTasks = computed(() => runningJobs.value.length > 0 || publishTas
           </n-popover>
           <n-button size="tiny" :disabled="selectedCount === 0" @click="selectedIds = new Set()">清空</n-button>
 
-          <n-select v-model:value="publishChannel" size="tiny" style="width: 140px" :options="channels.map((c: any) => ({ label: (c.alias || c.chat_name || String(c.chat_id)).slice(0, 14) + ((c.alias || c.chat_name || '').length > 14 ? '…' : ''), value: c.chat_id }))" placeholder="选择频道" />
+          <ChannelSelect v-model="publishChannel" size="tiny" width="140px" />
 
           <div style="margin-left: auto; display: flex; gap: 8px; align-items: center;">
             <n-button type="default" size="small" :disabled="selectedCount === 0" @click="navigateTo('/schedules')">📅 加入计划</n-button>
@@ -340,7 +306,7 @@ const hasActiveTasks = computed(() => runningJobs.value.length > 0 || publishTas
       <template v-for="job in runningJobs" :key="'c-'+job.id">
         <div class="progress-item">
           <div class="progress-header">
-            <n-tag type="warning" size="tiny" round :bordered="false">⚡ 压缩</n-tag>
+            <StatusTag status="compressing" />
             <n-text style="font-size: 12px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ job.video_name }}</n-text>
             <n-text depth="3" style="font-size: 10px; flex-shrink: 0; white-space: nowrap;">
               <template v-if="job.status === 'running'">{{ job.elapsed_sec ? Math.floor(job.elapsed_sec/60)+'m'+Math.floor(job.elapsed_sec%60)+'s' : '' }}<template v-if="job.eta_sec"> · 剩余 {{ Math.floor(job.eta_sec/60) }}m{{ Math.floor(job.eta_sec%60) }}s</template></template>
@@ -357,7 +323,7 @@ const hasActiveTasks = computed(() => runningJobs.value.length > 0 || publishTas
       <template v-for="t in publishTasks" :key="'p-'+t.id">
         <div class="progress-item">
           <div class="progress-header">
-            <n-tag type="default" size="tiny" round :bordered="false">📤 发布</n-tag>
+            <StatusTag status="running" />
             <n-text style="font-size: 12px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ t.video_name }}</n-text>
             <n-text depth="3" style="font-size: 10px; flex-shrink: 0; white-space: nowrap;">
               <template v-if="t.status === 'running' || t.status === 'uploading'">{{ t.elapsed_sec ? Math.floor(t.elapsed_sec/60)+'m'+Math.floor(t.elapsed_sec%60)+'s' : '' }}<template v-if="t.eta_sec"> · 剩余 {{ Math.floor(t.eta_sec/60) }}m{{ Math.floor(t.eta_sec%60) }}s</template></template>
@@ -370,10 +336,10 @@ const hasActiveTasks = computed(() => runningJobs.value.length > 0 || publishTas
             :color="t.status === 'done' ? 'var(--color-green)' : t.status === 'failed' ? 'var(--color-red)' : t.status === 'uploading' ? 'var(--color-purple)' : 'var(--color-purple)'"
             :indicator-placement="'inside'" :processing="t.status === 'running' || t.status === 'uploading'" />
           <n-button v-if="t.status === 'running' || t.status === 'uploading' || t.status === 'queued'" size="tiny" style="margin-top:4px" @click="cancelPublish(t.id)">取消</n-button>
-              <n-text v-if="t.status === 'failed' || t.status === 'cancelled'" size="tiny" type="error" style="margin-top:4px;display:block">{{ t.error ? t.error.slice(0,60) : '任务失败' }}</n-text>
+          <n-text v-if="t.status === 'failed' || t.status === 'cancelled'" size="tiny" type="error" style="margin-top:4px;display:block">{{ t.error ? t.error.slice(0,60) : '任务失败' }}</n-text>
         </div>
       </template>
-      <n-button size="tiny" style="margin-top: 6px" @click="clearProgress">清除已完成</n-button>
+      <n-button size="tiny" style="margin-top: 6px" @click="taskStore.clearDone">清除已完成</n-button>
     </div>
   </PageContainer>
 </template>

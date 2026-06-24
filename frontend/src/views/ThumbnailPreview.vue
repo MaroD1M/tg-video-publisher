@@ -1,10 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, h } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { NCard, NEmpty, NImage, NGrid, NGi, NText, NTag, NSpin, NButton, NSpace, NPopconfirm, useMessage } from 'naive-ui'
-import { fetchThumbnails, getThumbnailImage } from '@/api/client'
+import { fetchThumbnails, getThumbnailImage, regenerateThumbnail, deleteThumbnail } from '@/api/client'
 import PageHeader from '@/components/shared/PageHeader.vue'
 import PageContainer from '@/components/shared/PageContainer.vue'
-import api from '@/api/client'
 
 const message = useMessage()
 
@@ -31,14 +30,14 @@ onMounted(load)
 
 async function doRegenerate(thumbId: number) {
   try {
-    await api.post(`/thumbnails/${thumbId}/regenerate`)
+    await regenerateThumbnail(thumbId)
     message.success('已重新生成')
   } catch { message.error('重新生成失败') }
 }
 
 async function doDelete(thumbId: number) {
   try {
-    await api.delete(`/thumbnails/${thumbId}`)
+    await deleteThumbnail(thumbId)
     message.success('已删除')
     await load()
     selectedIds.value = new Set()
@@ -50,7 +49,7 @@ async function doBatchDelete() {
   if (!ids.length) { message.warning('请先选择缩略图'); return }
   let count = 0
   for (const id of ids) {
-    try { await api.delete(`/thumbnails/${id}`); count++ } catch {}
+    try { await deleteThumbnail(id); count++ } catch {}
   }
   message.success(`已删除 ${count} 个`)
   await load()
@@ -87,7 +86,6 @@ function formatSize(bytes: number) {
               <n-button size="tiny" @click="doRegenerate(t.id)">重新生成</n-button>
               <n-popconfirm @positive-click="() => doDelete(t.id)">
                 <template #trigger><n-button size="tiny" type="error">删除</n-button></template>
-                <template #action><n-button size="tiny" type="error" @click="() => doDelete(t.id)">确定</n-button><n-button size="tiny" style="margin-left:8px">取消</n-button></template>
                 确定删除此缩略图？
               </n-popconfirm>
             </n-space>

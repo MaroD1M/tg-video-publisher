@@ -8,7 +8,7 @@ from typing import Optional
 from app.utils.helpers import get_ffprobe_path
 
 
-VIDEO_EXTENSIONS = {".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v", ".ts", ".mts", ".m2ts"}
+VIDEO_EXTENSIONS = {".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v", ".ts", ".mts", ".m2ts", ".mpg", ".mpeg"}
 
 
 async def scan_directory(directory: str) -> list[dict]:
@@ -77,7 +77,6 @@ async def probe_video(filepath: str) -> Optional[dict]:
         streams = data.get("streams", [])
 
         video_stream = next((s for s in streams if s.get("codec_type") == "video"), {})
-        audio_stream = next((s for s in streams if s.get("codec_type") == "audio"), {})
 
         duration = float(fmt.get("duration", 0))
         bitrate = int(fmt.get("bit_rate", 0)) // 1000 if fmt.get("bit_rate") else 0

@@ -13,7 +13,6 @@ import {
   fetchChats, verifyChat, refreshChats, changePassword as changePwdApi,
   fetchVersion, checkVersion, fetchNotificationConfig, updateNotificationConfig,
 } from '@/api/client'
-import api from '@/api/client'
 
 const message = useMessage()
 const { isDark, toggle: toggleTheme } = useTheme()
@@ -99,8 +98,8 @@ const proxyForm = ref({
 })
 
 // ── General form ──
-const generalForm = ref({
-  video_source_dir: '/data/videos', output_dir: '/data/output', thumbnail_dir: '/data/thumbnails',
+const generalForm = ref<Record<string, any>>({
+  video_source_dirs: ['/data/videos'], output_dir: '/data/output', thumbnail_dir: '/data/thumbnails',
   compress_preset: 'balanced', thumbnail_layout: '3x3', max_workers: 1,
   thumb_caption_template: '', video_caption_template: '',
 })
@@ -128,8 +127,8 @@ async function saveBot() {
 async function doTestBot() {
   testingBot.value = true
   try {
-    const { data } = await api.get('/chats')
-    botTestResult.value = '✓ Bot 连接正常，发现 ' + (data.items?.length || 0) + ' 个对话'
+    const d = await fetchChats()
+    botTestResult.value = '✓ Bot 连接正常，发现 ' + (d.items?.length || 0) + ' 个对话'
   } catch { botTestResult.value = '✗ Bot 连接失败，请检查 Token 和网络配置' }
   testingBot.value = false
 }
@@ -149,9 +148,23 @@ onMounted(async () => {
   try {
     const data = await fetchSettings()
     settings.value = data
-    Object.keys(generalForm.value).forEach((k) => {
-      if (data[k]) (generalForm.value as any)[k] = data[k]
-    })
+    if (Array.isArray(data.video_source_dirs) && data.video_source_dirs.length) {
+      generalForm.value.video_source_dirs = [...data.video_source_dirs]
+    } else if (typeof data.video_source_dirs === 'string') {
+      try {
+        const parsed = JSON.parse(data.video_source_dirs)
+        if (Array.isArray(parsed) && parsed.length) generalForm.value.video_source_dirs = parsed
+      } catch {}
+    } else if (data.video_source_dir) {
+      generalForm.value.video_source_dirs = [data.video_source_dir]
+    }
+    generalForm.value.output_dir = data.output_dir || '/data/output'
+    generalForm.value.thumbnail_dir = data.thumbnail_dir || '/data/thumbnails'
+    if (data.compress_preset) generalForm.value.compress_preset = data.compress_preset
+    if (data.thumbnail_layout) generalForm.value.thumbnail_layout = data.thumbnail_layout
+    if (data.max_workers) generalForm.value.max_workers = parseInt(data.max_workers) || 1
+    if (data.thumb_caption_template) generalForm.value.thumb_caption_template = data.thumb_caption_template
+    if (data.video_caption_template) generalForm.value.video_caption_template = data.video_caption_template
     botForm.value.bot_token = data.bot_token || ''
     botForm.value.api_id = data.api_id || ''
     botForm.value.api_hash = data.api_hash || ''
@@ -169,7 +182,15 @@ onMounted(async () => {
 async function saveGeneral() {
   try {
     const body: Record<string, string> = {}
-    Object.entries(generalForm.value).forEach(([k, v]) => { body[k] = String(v) })
+    for (const [k, v] of Object.entries(generalForm.value)) {
+      if (k === 'video_source_dirs') {
+        const dirs = (v as string[]).filter(d => d.trim())
+        if (dirs.length === 0) { message.error('至少需要配置一个视频源目录'); return }
+        body[k] = JSON.stringify(dirs)
+      } else {
+        body[k] = String(v)
+      }
+    }
     await updateSettings(body)
     message.success('已保存')
   } catch { message.error('保存失败') }
@@ -285,7 +306,14 @@ async function saveNotification(item: any) {
               <n-card size="small" title="📁 目录配置" :bordered="true">
                 <n-form label-placement="top" size="small">
                   <n-form-item label="视频源目录">
-                    <n-input v-model:value="generalForm.video_source_dir" />
+                    <n-space vertical :size="6">
+                      <n-space v-for="(dir, idx) in generalForm.video_source_dirs" :key="idx" :size="6" align="center">
+                        <n-input v-model:value="generalForm.video_source_dirs[idx]" style="flex: 1" :placeholder="'/data/videos'" />
+                        <n-button size="tiny" type="error" quaternary @click="generalForm.video_source_dirs.splice(idx, 1)"
+                          :disabled="generalForm.video_source_dirs.length <= 1">✕</n-button>
+                      </n-space>
+                      <n-button size="tiny" dashed @click="generalForm.video_source_dirs.push('')">+ 添加目录</n-button>
+                    </n-space>
                   </n-form-item>
                   <n-form-item label="压缩输出目录">
                     <n-input v-model:value="generalForm.output_dir" />

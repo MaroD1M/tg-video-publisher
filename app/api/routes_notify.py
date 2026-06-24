@@ -1,11 +1,10 @@
-import json
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
 from typing import Optional
 
-from app.database.connection import get_db, async_session
+from app.database.connection import get_db
 from app.database.models import NotificationConfig
 
 router = APIRouter()

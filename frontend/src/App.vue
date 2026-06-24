@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { zhCN, dateZhCN, NConfigProvider, NMessageProvider } from 'naive-ui'
+import { zhCN, dateZhCN, NConfigProvider, NMessageProvider, NLoadingBarProvider } from 'naive-ui'
 import type { GlobalThemeOverrides } from 'naive-ui'
 import AppLayout from './components/layout/AppLayout.vue'
 import { useTheme } from './composables/useTheme'
@@ -37,8 +37,9 @@ const themeOverrides: GlobalThemeOverrides = {
 
 <template>
   <n-config-provider :theme="theme" :theme-overrides="themeOverrides" :locale="zhCN" :date-locale="dateZhCN">
-    <n-message-provider>
-      <AppLayout>
+    <n-loading-bar-provider>
+      <n-message-provider>
+        <AppLayout>
         <router-view v-slot="{ Component }">
           <template v-if="Component">
             <Transition name="page" mode="out-in">
@@ -47,7 +48,8 @@ const themeOverrides: GlobalThemeOverrides = {
           </template>
         </router-view>
       </AppLayout>
-    </n-message-provider>
+      </n-message-provider>
+    </n-loading-bar-provider>
   </n-config-provider>
 </template>
 

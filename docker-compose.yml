@@ -11,6 +11,9 @@ services:
     volumes:
       # 修改下面前 4 个路径为你的实际路径即可
       - /volume1/videos:/data/videos:ro          # 视频源目录（只读）
+      # 如需多个视频源目录，取消注释并映射更多路径，然后在 Web UI → 系统设置 → 常规中添加
+      # - /volume2/movies:/data/movies:ro
+      # - /volume3/tv:/data/tv:ro
       - /volume1/docker/tg-publisher/output:/data/output
       - /volume1/docker/tg-publisher/thumbnails:/data/thumbnails
       - /volume1/docker/tg-publisher/config:/app/config

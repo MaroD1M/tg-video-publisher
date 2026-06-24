@@ -1,14 +1,16 @@
 import shutil
 import datetime
+import json
 import os
 from fastapi import APIRouter, HTTPException, Depends, Query, Request
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
 from app.utils.helpers import (
     get_setting, set_setting, get_all_settings,
+    get_video_source_dirs,
     regenerate_bot_api_env, restart_bot_api, check_bot_api_process, is_configured
 )
 from app.database.connection import get_db
@@ -21,6 +23,7 @@ class SettingsUpdate(BaseModel):
     bot_token: Optional[str] = None
     api_id: Optional[str] = None
     api_hash: Optional[str] = None
+    video_source_dirs: Optional[List[str]] = None
     video_source_dir: Optional[str] = None
     output_dir: Optional[str] = None
     thumbnail_dir: Optional[str] = None
@@ -42,7 +45,9 @@ class SettingsUpdate(BaseModel):
 
 @router.get("/settings")
 async def get_settings():
-    return await get_all_settings()
+    data = await get_all_settings()
+    data["video_source_dirs"] = await get_video_source_dirs()
+    return data
 
 
 @router.put("/settings")
@@ -50,7 +55,12 @@ async def update_settings(data: SettingsUpdate):
     AUTH_FIELDS = {"admin_username", "admin_password"}
     for key, value in data.model_dump(exclude_none=True).items():
         if value is not None and key not in AUTH_FIELDS:
-            await set_setting(key, str(value))
+            if key == "video_source_dirs":
+                await set_setting(key, json.dumps(value))
+            elif key == "video_source_dir":
+                await set_setting("video_source_dirs", json.dumps([value]))
+            else:
+                await set_setting(key, str(value))
 
     await regenerate_bot_api_env()
 
@@ -76,7 +86,12 @@ async def complete_setup(data: SettingsUpdate, request: Request = None):
     AUTH_FIELDS = {"admin_username", "admin_password"}
     for key, value in data.model_dump(exclude_none=True).items():
         if value is not None and key not in AUTH_FIELDS:
-            await set_setting(key, str(value))
+            if key == "video_source_dirs":
+                await set_setting(key, json.dumps(value))
+            elif key == "video_source_dir":
+                await set_setting("video_source_dirs", json.dumps([value]))
+            else:
+                await set_setting(key, str(value))
 
     await regenerate_bot_api_env()
 

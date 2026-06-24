@@ -1,5 +1,4 @@
 import datetime
-import os
 from pydantic import BaseModel as PydanticBaseModel
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,11 +7,10 @@ from typing import Optional
 from pathlib import Path
 
 from app.database.connection import get_db
-from app.database.models import Video, VideoStatus, Thumbnail, PublishLog, CompressJob, JobStatus
-from app.modules.file_scanner import scan_directory, probe_video, compute_file_hash
+from app.database.models import Video, VideoStatus, PublishLog
+from app.modules.file_scanner import scan_directory, probe_video, compute_file_hash, VIDEO_EXTENSIONS
 from app.modules.publisher import publish_video
-from app.modules.thumbnails import generate_thumbnail
-from app.utils.helpers import get_setting
+from app.utils.helpers import get_setting, get_video_source_dirs
 
 router = APIRouter()
 
@@ -138,14 +136,15 @@ async def do_scan(path: str = Query(...), db: AsyncSession = Depends(get_db)):
 
 # ── Fixed-path routes (MUST come before /videos/{video_id} to avoid 422) ──
 
-VIDEO_EXTENSIONS = {'.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.mpg', '.mpeg', '.ts'}
-
 
 @router.get("/videos/browse")
 async def browse_directory(
-    path: str = Query("/data/videos"),
+    path: str = Query(None),
 ):
     """Browse a directory: return subdirectories and video files."""
+    if not path:
+        dirs = await get_video_source_dirs()
+        path = dirs[0] if dirs else "/data/videos"
     p = Path(path)
     if not p.exists():
         return {"path": path, "dirs": [], "videos": [], "error": f"目录不存在: {path}"}

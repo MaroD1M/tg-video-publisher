@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, h, nextTick } from 'vue'
+import { ref, onMounted, h } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   NCard, NButton, NModal, NForm, NFormItem, NInput, NSelect,
@@ -9,9 +9,9 @@ import { AddOutline, InformationCircleOutline } from '@vicons/ionicons5'
 import PageHeader from '@/components/shared/PageHeader.vue'
 import PageContainer from '@/components/shared/PageContainer.vue'
 import {
-  fetchSchedules, createSchedule, updateSchedule, deleteSchedule, triggerSchedule, fetchChats, batchAddToSchedule
+  fetchSchedules, createSchedule, updateSchedule, deleteSchedule, triggerSchedule, fetchChats, batchAddToSchedule,
+  fetchVideos, previewCron, fetchScheduleItems, removeScheduleItem,
 } from '@/api/client'
-import api from '@/api/client'
 
 const message = useMessage()
 const route = useRoute()
@@ -22,7 +22,7 @@ async function initPending() {
   const ids = route.query.ids as string
   if (!ids) return
   try {
-    const { data } = await api.get('/videos', { params: { page_size: 100 } })
+    const data = await fetchVideos({ page_size: 100 })
     const idSet = new Set(ids.split(',').map(Number))
     pendingVideos.value = (data.items || []).filter((v: any) => idSet.has(v.id))
   } catch {}
@@ -50,7 +50,7 @@ async function loadCronPreview() {
   if (!form.value.cron_expr || !form.value.cron_expr.trim()) return
   previewLoading.value = true
   try {
-    const { data } = await api.get('/cron/preview', { params: { expr: form.value.cron_expr } })
+    const data = await previewCron(form.value.cron_expr)
     cronPreview.value = data.times || []
   } catch { cronPreview.value = [] }
   previewLoading.value = false
@@ -211,7 +211,7 @@ async function openQueue(schedule: any) {
 async function loadQueueItems() {
   queueLoading.value = true
   try {
-    const { data } = await api.get(`/schedules/${queueScheduleId.value}/items`)
+    const data = await fetchScheduleItems(queueScheduleId.value)
     queueItems.value = data.items || []
   } catch { message.error('加载队列失败') }
   queueLoading.value = false
@@ -219,7 +219,7 @@ async function loadQueueItems() {
 
 async function removeQueueItem(itemId: number) {
   try {
-    await api.put(`/schedules/${queueScheduleId.value}/items?action=remove`, [itemId])
+    await removeScheduleItem(queueScheduleId.value, itemId)
     message.success('已移除')
     await loadQueueItems()
   } catch { message.error('移除失败') }

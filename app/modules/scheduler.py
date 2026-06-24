@@ -65,10 +65,10 @@ async def schedule_job(schedule: Schedule):
 
     async def job_func():
         async with async_session() as db:
-            from app.api.routes_schedules import _publish_next_from_schedule
+            from app.modules.schedule_executor import publish_next_from_schedule
             s = await db.get(Schedule, schedule.id)
             if s:
-                await _publish_next_from_schedule(s, db)
+                await publish_next_from_schedule(s, db)
 
     try:
         trigger = CronTrigger.from_crontab(schedule.cron_expr)
@@ -103,6 +103,6 @@ async def trigger_now(schedule_id: int):
     async with async_session() as db:
         s = await db.get(Schedule, schedule_id)
         if s:
-            from app.api.routes_schedules import _publish_next_from_schedule
-            return await _publish_next_from_schedule(s, db)
+            from app.modules.schedule_executor import publish_next_from_schedule
+            return await publish_next_from_schedule(s, db)
     return {"ok": False, "message": "Schedule not found"}

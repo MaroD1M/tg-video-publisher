@@ -5,8 +5,7 @@ import { NCard, NGrid, NGi, NText, NButton, NDataTable, NTag, NAlert, NSpace, NS
 import PageHeader from '@/components/shared/PageHeader.vue'
 import PageContainer from '@/components/shared/PageContainer.vue'
 import StatusDot from '@/components/shared/StatusDot.vue'
-import { fetchChats, refreshChats, setChatAlias } from '@/api/client'
-import api from '@/api/client'
+import { fetchChats, refreshChats, setChatAlias, fetchBotStatus } from '@/api/client'
 
 const router = useRouter()
 const message = useMessage()
@@ -70,7 +69,7 @@ function procStateColor(state: string): 'success' | 'error' | 'warning' | 'defau
 async function load() {
   loading.value = true
   try {
-    const { data } = await api.get('/bot/status')
+    const data = await fetchBotStatus()
     status.value = data
   } catch { message.error('加载 Bot 状态失败') }
   try {

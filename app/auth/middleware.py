@@ -14,7 +14,6 @@ PUBLIC_PREFIXES = [
     "/api/docs",
     "/api/openapi.json",
     "/ws/compress",
-    "/api/thumbnails/",
     "/api/version",
     "/api/version/check",
 ]
@@ -49,6 +48,10 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
         for prefix in PUBLIC_PREFIXES:
             if path.startswith(prefix):
                 return await call_next(request)
+
+        # ②b Thumbnail images are public via GET (list + image serving)
+        if path.startswith("/api/thumbnails/") and request.method == "GET":
+            return await call_next(request)
 
         # ③ Public SPA routes + static assets → allow (data is protected via API)
         if path in PUBLIC_EXACT or path.rstrip("/") in PUBLIC_EXACT or path.startswith("/assets/"):

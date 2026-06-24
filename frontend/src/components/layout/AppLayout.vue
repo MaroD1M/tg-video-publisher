@@ -7,7 +7,10 @@ import {
   CalendarOutline, DocumentTextOutline, SettingsOutline, LayersOutline,
   LogOutOutline, GitNetworkOutline, TrashOutline,
 } from '@vicons/ionicons5'
-import { fetchStats, fetchPublishTasks } from '@/api/client'
+import { fetchPublishTasks } from '@/api/client'
+import { useSettingsStore } from '@/stores/settings'
+import { useTaskStore } from '@/stores/tasks'
+import { useWebSocket } from '@/composables/useWebSocket'
 import AppSidebar from './AppSidebar.vue'
 import AppFooter from './AppFooter.vue'
 
@@ -15,11 +18,10 @@ const router = useRouter()
 const route = useRoute()
 const collapsed = ref(false)
 const showSetup = computed(() => route.name === 'setup' || route.name === 'login')
+const settingsStore = useSettingsStore()
+const taskStore = useTaskStore()
 const stats = ref({ compress_running: 0, compress_queued: 0, queued: 0, publish_active: 0 })
 let statsTimer: number | undefined
-let ws: WebSocket | null = null
-let wsReconnectTimer: number | undefined
-let wsReconnectAttempts = 0
 
 function renderIcon(icon: Component) {
   return () => h(NIcon, null, { default: () => h(icon) })
@@ -61,13 +63,10 @@ const menuItems = computed(() => [
 
 async function pollStats() {
   try {
-    const data = await fetchStats()
-    stats.value = {
-      compress_running: data.compress_running || 0,
-      compress_queued: data.compress_queued || 0,
-      queued: data.queued || 0,
-      publish_active: stats.value.publish_active,
-    }
+    const data = await settingsStore.loadStats(true)
+    stats.value.compress_running = data.compress_running || 0
+    stats.value.compress_queued = data.compress_queued || 0
+    stats.value.queued = data.queued || 0
   } catch {}
   try {
     const d = await fetchPublishTasks({ status: 'queued,running,uploading', page_size: 100 })
@@ -75,38 +74,20 @@ async function pollStats() {
   } catch {}
 }
 
-let wsMounted = false
-
-function connectWS() {
-  ws?.close()
-  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
-  const token = localStorage.getItem('access_token')
-  ws = new WebSocket(`${protocol}//${location.host}/ws/compress?token=${token || ''}`)
-  ws.onmessage = () => {
-    pollStats()
-  }
-  ws.onclose = () => {
-    if (!wsMounted) return
-    const delay = Math.min((wsReconnectAttempts || 1) * 5000, 60000)
-    wsReconnectAttempts = (wsReconnectAttempts || 1) + 1
-    wsReconnectTimer = window.setTimeout(connectWS, delay)
-  }
-  ws.onerror = () => { ws?.close() }
-  ws.onopen = () => { wsReconnectAttempts = 0 }
-}
+const { connect: connectWS, disconnect: disconnectWS } = useWebSocket(
+  '/ws/compress',
+  () => { pollStats() }
+)
 
 onMounted(() => {
-  wsMounted = true
   pollStats()
   connectWS()
   statsTimer = window.setInterval(pollStats, 30000)
 })
 
 onUnmounted(() => {
-  wsMounted = false
+  disconnectWS()
   if (statsTimer) clearInterval(statsTimer)
-  if (wsReconnectTimer) clearTimeout(wsReconnectTimer)
-  ws?.close()
 })
 </script>
 

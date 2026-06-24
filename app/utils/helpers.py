@@ -1,4 +1,5 @@
 import asyncio
+import json
 import shutil
 from pathlib import Path
 
@@ -35,6 +36,21 @@ async def is_configured() -> bool:
     api_id = await get_setting("api_id")
     api_hash = await get_setting("api_hash")
     return bool(token and api_id and api_hash)
+
+
+async def get_video_source_dirs() -> list[str]:
+    dirs_raw = await get_setting("video_source_dirs")
+    if dirs_raw:
+        try:
+            dirs = json.loads(dirs_raw)
+            if isinstance(dirs, list) and len(dirs) > 0 and all(isinstance(d, str) for d in dirs):
+                return dirs
+        except (json.JSONDecodeError, TypeError):
+            pass
+    old = await get_setting("video_source_dir")
+    if old:
+        return [old]
+    return ["/data/videos"]
 
 
 def _sanitize_env_value(value: str) -> str:

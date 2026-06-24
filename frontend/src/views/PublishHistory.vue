@@ -71,7 +71,7 @@ async function load() {
   try {
     const params: any = { page: currentPage.value, page_size: pageSize }
     if (searchText.value) params.search = searchText.value
-    if (filterSuccess.value !== null) params.success = filterSuccess.value === 'success'
+    if (filterSuccess.value !== null) params.success = filterSuccess.value === 'success' ? true : false
     if (filterChatId.value) params.chat_id = filterChatId.value
     if (filterDateFrom.value) params.date_from = new Date(filterDateFrom.value).toISOString()
     if (filterDateTo.value) params.date_to = new Date(filterDateTo.value).toISOString()

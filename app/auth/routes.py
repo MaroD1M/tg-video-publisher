@@ -111,7 +111,8 @@ async def request_reset(data: ResetRequest, db: AsyncSession = Depends(get_db)):
 
     token = secrets.token_hex(16)
     expire_key = f"reset_token_{user.id}"
-    await set_setting(expire_key, f"{token}:{int(__import__('time').time())}")
+    hashed = hash_password(token)
+    await set_setting(expire_key, f"{hashed}:{int(__import__('time').time())}")
 
     admin_id = await get_setting("admin_chat_id")
     if admin_id:
@@ -144,10 +145,10 @@ async def confirm_reset(data: ResetConfirm, db: AsyncSession = Depends(get_db)):
         raise HTTPException(400, "未申请重置或验证码已过期")
 
     try:
-        token, ts = stored.split(":")
+        hashed_token, ts = stored.split(":")
         if time.time() - int(ts) > 600:
             raise HTTPException(400, "验证码已过期 (10 分钟)")
-        if token != data.reset_token:
+        if not verify_password(data.reset_token, hashed_token):
             raise HTTPException(400, "验证码错误")
     except ValueError:
         raise HTTPException(400, "验证码无效")

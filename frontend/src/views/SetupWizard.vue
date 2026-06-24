@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   NSteps, NStep, NCard, NForm, NFormItem, NInput, NInputNumber,
@@ -19,17 +19,6 @@ const dirForm = ref({ video_source_dir: '/data/videos', output_dir: '/data/outpu
 const proxyForm = ref({ enabled: false, type: 'http', host: '127.0.0.1', port: 7890, user: '', pass: '' })
 
 const submitting = ref(false)
-
-const steps = computed(() => {
-  const s = []
-  if (needAdmin.value) s.push({ title: '管理员', status: currentStep.value > 1 ? 'finish' : 'process' })
-  s.push({ title: 'Telegram', status: currentStep.value > (needAdmin.value ? 2 : 1) ? 'finish' : 'process' })
-  s.push({ title: '目录', status: 'wait' })
-  s.push({ title: '网络', status: 'wait' })
-  return s
-})
-
-const showProxy = ref(false)
 
 async function checkNeedAdmin() {
   try { needAdmin.value = !(await hasUsers()).has_users } catch { needAdmin.value = true }

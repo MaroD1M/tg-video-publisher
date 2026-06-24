@@ -23,7 +23,9 @@ api.interceptors.response.use(
         window.location.replace('/login')
       }
     }
-    return Promise.reject(err)
+    const detail = err.response?.data?.detail || err.message
+    const msg = typeof detail === 'string' ? detail : '请求失败'
+    return Promise.reject(new Error(msg))
   }
 )
 
@@ -341,5 +343,30 @@ export async function executeDiskCleanup(body: Record<string, any>) {
 
 export async function deletePublishLog(logId: number) {
   const { data } = await api.delete(`/logs/${logId}`)
+  return data
+}
+
+export async function deleteThumbnail(thumbId: number) {
+  const { data } = await api.delete(`/thumbnails/${thumbId}`)
+  return data
+}
+
+export async function fetchBotStatus() {
+  const { data } = await api.get('/bot/status')
+  return data
+}
+
+export async function previewCron(expr: string) {
+  const { data } = await api.get('/cron/preview', { params: { expr } })
+  return data
+}
+
+export async function fetchScheduleItems(scheduleId: number) {
+  const { data } = await api.get(`/schedules/${scheduleId}/items`)
+  return data
+}
+
+export async function removeScheduleItem(scheduleId: number, itemId: number) {
+  const { data } = await api.put(`/schedules/${scheduleId}/items?action=remove`, [itemId])
   return data
 }

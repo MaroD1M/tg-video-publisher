@@ -1,10 +1,9 @@
 import os
-from pathlib import Path
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.database.connection import get_db
-from app.database.models import Video, Thumbnail, CompressJob, JobStatus, PublishLog
+from app.database.models import Thumbnail, CompressJob, JobStatus, PublishLog
 from app.utils.helpers import get_setting
 
 router = APIRouter()

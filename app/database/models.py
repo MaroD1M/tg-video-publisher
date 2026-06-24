@@ -75,8 +75,8 @@ class Video(Base):
     file_hash = Column(String(64))
     status = Column(SAEnum(VideoStatus), default=VideoStatus.pending)
     error_msg = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.UTC))
+    updated_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.UTC), onupdate=lambda: datetime.datetime.now(datetime.UTC))
 
     compress_jobs = relationship("CompressJob", back_populates="video", cascade="all, delete-orphan")
     thumbnails = relationship("Thumbnail", back_populates="video", cascade="all, delete-orphan")
@@ -120,7 +120,7 @@ class Thumbnail(Base):
     size_bytes = Column(Integer, default=0)
     has_timestamp = Column(Boolean, default=True)
     has_watermark = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.UTC))
 
     video = relationship("Video", back_populates="thumbnails")
 
@@ -151,7 +151,7 @@ class Schedule(Base):
     enabled = Column(Boolean, default=True)
     next_run_at = Column(DateTime, nullable=True)
     last_run_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.UTC))
 
     items = relationship("ScheduleItem", back_populates="schedule", cascade="all, delete-orphan", order_by="ScheduleItem.sort_order")
 
@@ -184,7 +184,7 @@ class PublishLog(Base):
     success = Column(Boolean, default=False)
     error_msg = Column(Text, nullable=True)
     retry_count = Column(Integer, default=0)
-    published_at = Column(DateTime, default=datetime.datetime.utcnow)
+    published_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.UTC))
 
 
 class PublishTask(Base):
@@ -205,8 +205,8 @@ class PublishTask(Base):
     sort_order = Column(Integer, default=0)
     is_paused = Column(Boolean, default=False)
     step_log = Column(Text)  # JSON: [{step, elapsed, result}]
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.UTC))
+    updated_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.UTC), onupdate=lambda: datetime.datetime.now(datetime.UTC))
 
 
 class Setting(Base):
@@ -214,7 +214,7 @@ class Setting(Base):
 
     key = Column(String(128), primary_key=True)
     value = Column(Text, default="")
-    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.UTC), onupdate=lambda: datetime.datetime.now(datetime.UTC))
 
 
 class NotificationConfig(Base):
@@ -233,4 +233,4 @@ class User(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     username = Column(String(128), unique=True, nullable=False)
     password_hash = Column(String(256), nullable=False)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.UTC))

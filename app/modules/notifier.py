@@ -1,4 +1,5 @@
 import json
+import asyncio
 from telegram.error import TelegramError
 from app.utils.helpers import get_setting
 import logging
@@ -7,6 +8,7 @@ import time
 _log = logging.getLogger("tgvp.notifier")
 
 _last_sent: dict[str, float] = {}
+_freq_lock = asyncio.Lock()
 _FREQUENCY_WINDOW = 30  # seconds between same-type notifications
 
 
@@ -17,7 +19,7 @@ async def notify_admin(message: str, event_type: str = "", variables: dict | Non
     from sqlalchemy import select
 
     # Check frequency limit
-    if not _check_frequency(event_type):
+    if not await _check_frequency(event_type):
         return
 
     # Read notification config
@@ -73,12 +75,13 @@ async def notify_admin(message: str, event_type: str = "", variables: dict | Non
             _log.warning(f"Failed to notify {chat_id}: {e}")
 
 
-def _check_frequency(event_type: str) -> bool:
+async def _check_frequency(event_type: str) -> bool:
     if not event_type:
         return True
     now = time.time()
-    last = _last_sent.get(event_type, 0)
-    if now - last < _FREQUENCY_WINDOW:
-        return False
-    _last_sent[event_type] = now
-    return True
+    async with _freq_lock:
+        last = _last_sent.get(event_type, 0)
+        if now - last < _FREQUENCY_WINDOW:
+            return False
+        _last_sent[event_type] = now
+        return True
