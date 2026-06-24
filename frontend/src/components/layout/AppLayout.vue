@@ -75,7 +75,10 @@ async function pollStats() {
   } catch {}
 }
 
+let wsMounted = false
+
 function connectWS() {
+  ws?.close()
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
   const token = localStorage.getItem('access_token')
   ws = new WebSocket(`${protocol}//${location.host}/ws/compress?token=${token || ''}`)
@@ -83,6 +86,7 @@ function connectWS() {
     pollStats()
   }
   ws.onclose = () => {
+    if (!wsMounted) return
     const delay = Math.min((wsReconnectAttempts || 1) * 5000, 60000)
     wsReconnectAttempts = (wsReconnectAttempts || 1) + 1
     wsReconnectTimer = window.setTimeout(connectWS, delay)
@@ -92,12 +96,14 @@ function connectWS() {
 }
 
 onMounted(() => {
+  wsMounted = true
   pollStats()
   connectWS()
   statsTimer = window.setInterval(pollStats, 30000)
 })
 
 onUnmounted(() => {
+  wsMounted = false
   if (statsTimer) clearInterval(statsTimer)
   if (wsReconnectTimer) clearTimeout(wsReconnectTimer)
   ws?.close()

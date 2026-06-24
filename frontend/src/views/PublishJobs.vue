@@ -88,7 +88,10 @@ const stats = computed(() => {
   return { total, done, running, queued, failed }
 })
 
+let wsMounted = false
+
 function connectWS() {
+  ws.value?.close()
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
   const token = localStorage.getItem('access_token')
   ws.value = new WebSocket(`${protocol}//${location.host}/ws/compress?token=${token || ''}`)
@@ -120,6 +123,7 @@ function connectWS() {
     }
   }
   ws.value.onclose = () => {
+    if (!wsMounted) return
     const delay = Math.min((reconnectAttempts || 1) * 5000, 60000)
     reconnectAttempts = (reconnectAttempts || 1) + 1
     reconnectTimer = window.setTimeout(connectWS, delay)
@@ -253,12 +257,14 @@ const grouped = computed(() => {
 })
 
 onMounted(() => {
+  wsMounted = true
   load()
   connectWS()
   initPending()
 })
 
 onUnmounted(() => {
+  wsMounted = false
   if (reconnectTimer) clearTimeout(reconnectTimer)
   ws.value?.close()
 })
