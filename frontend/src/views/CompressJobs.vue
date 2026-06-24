@@ -219,8 +219,8 @@ function getPendingSize(vid: number) {
   if (!pendingConfig.value[vid]) updatePendingConfig(vid, 'target_size_mb', 500)
   return pendingConfig.value[vid]?.target_size_mb || 500
 }
-function setPendingSize(vid: number, val: number) {
-  updatePendingConfig(vid, 'target_size_mb', val)
+function setPendingSize(vid: number, val: number | null) {
+  updatePendingConfig(vid, 'target_size_mb', val ?? 500)
 }
 </script>
 
@@ -252,7 +252,7 @@ function setPendingSize(vid: number, val: number) {
           <div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--border-subtle)">
             <n-text style="flex:1;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ v.filename }}</n-text>
             <n-select :value="getPendingPreset(v.id)" @update:value="(val: string) => setPendingPreset(v.id, val)" size="tiny" style="width:120px" :options="[{label:'极速 H.264',value:'fast'},{label:'均衡 H.265',value:'balanced'},{label:'高画质 2-pass',value:'high_quality'}]" />
-            <n-input-number :value="getPendingSize(v.id)" @update:value="(val: number) => setPendingSize(v.id, val)" size="tiny" :min="10" :max="2000" style="width:80px" /> <n-text depth="3" style="font-size:11px">MB</n-text>
+            <n-input-number :value="getPendingSize(v.id)" @update:value="(val: number | null) => setPendingSize(v.id, val)" size="tiny" :min="10" :max="2000" style="width:80px" /> <n-text depth="3" style="font-size:11px">MB</n-text>
             <n-button size="tiny" type="primary" @click="confirmPending(v.id)">提交</n-button>
           </div>
         </n-gi>
