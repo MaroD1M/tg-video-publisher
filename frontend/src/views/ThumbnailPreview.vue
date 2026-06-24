@@ -66,7 +66,11 @@ function formatSize(bytes: number) {
             <n-text depth="3" style="font-size: 11px; display: block; margin-top: 6px; text-align: center;">{{ t.width }}×{{ t.height }} · {{ formatSize(t.size_bytes) }}</n-text>
             <n-space justify="center" style="margin-top: 6px">
               <n-button size="tiny" @click="doRegenerate(t.id)">重新生成</n-button>
-              <n-popconfirm :on-positive-click="() => doDelete(t.id)" positive-text="确定" negative-text="取消"><n-button size="tiny" type="error">删除</n-button>确定删除此缩略图？</n-popconfirm>
+              <n-popconfirm @positive-click="() => doDelete(t.id)">
+                <template #trigger><n-button size="tiny" type="error">删除</n-button></template>
+                <template #action><n-button size="tiny" type="error" @click="() => doDelete(t.id)">确定</n-button><n-button size="tiny" style="margin-left:8px">取消</n-button></template>
+                确定删除此缩略图？
+              </n-popconfirm>
             </n-space>
           </n-card>
         </n-gi>

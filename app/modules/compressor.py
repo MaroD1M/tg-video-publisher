@@ -194,6 +194,7 @@ async def run_compress_job(
         "video": Path(input_path).name,
         "preset": preset.value, "original_size": size_bytes,
         "thumbnail_id": thumbnail_id,
+        "phase": "encoding",
     })
 
     start_time = time.time()
@@ -207,18 +208,24 @@ async def run_compress_job(
             output_path.unlink()
         await broadcast({"type": "job_error", "job_id": job_id, "error": "Cancelled by user"})
         _cleanup_job(job_id)
-        return {"status": "cancelled", "output_size": 0, "output_path": ""}
+        return {"status": "cancelled", "output_size": 0, "output_path": "", "stderr": stderr_text}
 
     if code != 0:
         await broadcast({"type": "job_error", "job_id": job_id, "error": stderr_text[:500]})
         _cleanup_job(job_id)
-        return {"status": "failed", "output_size": 0, "output_path": "", "error": stderr_text[:500]}
+        return {"status": "failed", "output_size": 0, "output_path": "", "error": stderr_text[:500], "stderr": stderr_text}
 
     # Phase 2: Check size — retry with aggressive settings if needed (20% tolerance)
     if output_path.exists():
         output_size = output_path.stat().st_size
         target_bytes = target_size_mb * 1_000_000
         if output_size > target_bytes * 1.2:  # 20% tolerance
+            await broadcast({
+                "type": "progress", "job_id": job_id,
+                "percent": 100, "eta_sec": 0, "phase": "retry_pass2",
+                "elapsed_sec": round(time.time() - start_time),
+                "speed": 0, "fps": 0,
+            })
             retry_path = output_dir / f"retry_{output_filename}"
             cmd_retry = [
                 get_ffmpeg_path(), "-y", "-i", input_path,
@@ -227,7 +234,7 @@ async def run_compress_job(
                 "-c:a", "aac", "-b:a", "96k", "-movflags", "+faststart",
                 str(retry_path),
             ]
-            code2, _, _ = await _run_ffmpeg(cmd_retry, duration_sec, job_id, 100, start_time)
+            code2, _, _ = await _run_ffmpeg(cmd_retry, duration_sec, job_id, 100, start_time, "retry_pass2")
             cancel_ev = cancel_events.get(job_id)
             if cancel_ev and cancel_ev.is_set():
                 if retry_path.exists(): retry_path.unlink()
@@ -260,12 +267,12 @@ async def run_compress_job(
         "ratio": round((1 - output_size / size_bytes) * 100, 1) if size_bytes else 0,
     })
     _cleanup_job(job_id)
-    return {"status": "done", "output_size": output_size, "output_path": str(output_path)}
+    return {"status": "done", "output_size": output_size, "output_path": str(output_path), "stderr": stderr_text}
 
 
 async def _run_ffmpeg(
     cmd: list[str], duration_sec: float, job_id: int,
-    max_pct: float, start_time: float,
+    max_pct: float, start_time: float, phase: str = "encoding",
 ) -> tuple[int, float, str]:
     # Pre-flight cancel check — avoid spawning FFmpeg if already cancelled
     cancel_ev = cancel_events.get(job_id)
@@ -343,6 +350,7 @@ async def _run_ffmpeg(
                     "elapsed_sec": round(elapsed),
                     "speed": round(latest_speed, 1) if latest_speed else 0,
                     "fps": round(latest_fps, 1) if latest_fps else 0,
+                    "phase": phase,
                 })
 
     await proc.wait()
@@ -362,6 +370,7 @@ async def _run_ffmpeg(
         "elapsed_sec": round(time.time() - start_time),
         "speed": round(latest_speed, 1) if latest_speed else 0,
         "fps": round(latest_fps, 1) if latest_fps else 0,
+        "phase": phase + "_done",
     })
 
     return proc.returncode, max_pct, stderr_tail

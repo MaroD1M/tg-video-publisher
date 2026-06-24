@@ -19,6 +19,7 @@ router = APIRouter()
 
 job_queue: asyncio.Queue = asyncio.Queue()
 worker_task: Optional[asyncio.Task] = None
+worker_tasks: list[asyncio.Task] = []
 _worker_lock = asyncio.Lock()
 
 
@@ -128,6 +129,7 @@ async def _execute_one(job_data: dict):
 
                 st = result["status"]
                 job.status = JobStatus(st)
+                job.error_log = result.get("stderr", "") or result.get("error", "")
                 if st == "done":
                     video.status = VideoStatus.compressed
                 elif st == "skipped":
@@ -193,28 +195,46 @@ async def _execute_one(job_data: dict):
 
 
 async def start_worker():
-    global worker_task
+    global worker_task, worker_tasks
     set_broadcast_callback(_broadcast_fn)
     async with _worker_lock:
-        if worker_task is None or worker_task.done():
-            # Reset stuck running jobs (container restarted)
-            try:
-                async with async_session() as db:
-                    from app.database.models import Video, VideoStatus
-                    rows = (await db.execute(
-                        select(CompressJob).where(CompressJob.status == JobStatus.running)
-                    )).scalars().all()
-                    for j in rows:
-                        j.status = JobStatus.failed
-                        j.error_log = "Task interrupted (container restarted)"
-                        video = await db.get(Video, j.video_id)
-                        if video:
-                            video.status = VideoStatus.failed
-                            video.error_msg = "Compression interrupted (container restarted)"
-                    await db.commit()
-            except Exception:
-                pass
-            worker_task = asyncio.create_task(_compression_worker())
+        # Cancel existing workers if any
+        for t in worker_tasks:
+            if not t.done():
+                t.cancel()
+        worker_tasks = []
+
+        if worker_task is not None and not worker_task.done():
+            return  # Already running
+
+        # Reset stuck running jobs (container restarted)
+        try:
+            async with async_session() as db:
+                from app.database.models import Video, VideoStatus
+                rows = (await db.execute(
+                    select(CompressJob).where(CompressJob.status == JobStatus.running)
+                )).scalars().all()
+                for j in rows:
+                    j.status = JobStatus.failed
+                    j.error_log = "Task interrupted (container restarted)"
+                    video = await db.get(Video, j.video_id)
+                    if video:
+                        video.status = VideoStatus.failed
+                        video.error_msg = "Compression interrupted (container restarted)"
+                await db.commit()
+        except Exception:
+            pass
+
+        max_w = 1
+        try:
+            max_w_str = await get_setting("max_workers", "1")
+            max_w = max(1, min(8, int(max_w_str)))
+        except (ValueError, TypeError):
+            max_w = 1
+
+        for _ in range(max_w):
+            worker_tasks.append(asyncio.create_task(_compression_worker()))
+        worker_task = worker_tasks[0] if worker_tasks else None
 
 
 @router.post("/compress")
@@ -320,9 +340,9 @@ async def list_compress_jobs(
                 "compression_ratio": j.compression_ratio,
                 "progress": j.progress,
                 "status": j.status.value if j.status else "queued",
-                "error_log": j.error_log,
+                "error_log": j.error_log or job_stderr.get(j.id, ""),
                 "eta_sec": 0,
-                "stderr": job_stderr.get(j.id, ""),
+                "stderr": job_stderr.get(j.id, "") or j.error_log or "",
                 "thumbnail_id": thumb_id,
             })
 

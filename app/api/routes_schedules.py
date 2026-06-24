@@ -268,6 +268,7 @@ async def _publish_next_from_schedule(schedule: Schedule, db: AsyncSession) -> d
         video_id=video.id,
         channel_id=schedule.target_chat_id,
         channel_name=str(schedule.target_chat_id),
+        schedule_id=schedule.id,
     )
 
     item.status = ItemStatus.publishing_video

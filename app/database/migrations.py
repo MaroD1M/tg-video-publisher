@@ -23,6 +23,7 @@ MISSING_COLUMNS = {
         ("sort_order", "INTEGER DEFAULT 0"),
         ("is_paused", "BOOLEAN DEFAULT 0"),
         ("step_log", "TEXT"),
+        ("schedule_id", "INTEGER DEFAULT 0"),
     ],
 }
 

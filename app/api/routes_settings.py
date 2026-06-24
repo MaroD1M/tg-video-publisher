@@ -1,5 +1,6 @@
 import shutil
 import datetime
+import os
 from fastapi import APIRouter, HTTPException, Depends, Query, Request
 from pydantic import BaseModel
 from typing import Optional
@@ -374,7 +375,7 @@ async def bot_status():
         diagnosis.append({"level": "error", "msg": f"代理 {proxy_config.get('host','')}:{proxy_config.get('port','')} 连接失败: {proxy_error}. 检查代理服务器是否运行"})
     if proxy_enabled == "true" and proxy_ok and bot_server_ok and dns_ok and not bot_ok:
         diagnosis.append({"level": "warn", "msg": f"代理和网络正常但 Bot 连接失败: {bot_error}. 请检查 Bot Token 或 API ID/Hash 是否正确"})
-    if proxy_enabled == "true" and proxy_ok and env_exists and not env_has_proxy:
+    if proxy_enabled == "true" and proxy_ok and env_exists and not env_has_proxy and not os.environ.get("BOT_API_PROXY"):
         diagnosis.append({"level": "warn", "msg": "代理已配置但 bot-api.env 未写入代理设置，请点系统设置 > 应用并重启"})
     if bot_ok:
         diagnosis.append({"level": "success", "msg": f"Bot @{bot_username} 连接正常"})
@@ -400,7 +401,7 @@ async def bot_status():
         "bot": {"ok": bot_ok, "error": bot_error, "username": bot_username},
         "dns": {"ok": dns_ok, "ips": dns_ips, "error": dns_error, "target": "pluto.web.telegram.org"},
         "proxy": {"check": proxy_ok, "error": proxy_error, "config": proxy_config},
-        "env": {"exists": env_exists, "has_api_id": env_has_api_id, "has_proxy": env_has_proxy},
+        "env": {"exists": env_exists, "has_api_id": env_has_api_id, "has_proxy": env_has_proxy or bool(os.environ.get("BOT_API_PROXY")), "proxy_source": "BOT_API_PROXY" if os.environ.get("BOT_API_PROXY") else ("env_file" if env_has_proxy else None)},
         "diagnosis": diagnosis,
         "channel_count": channel_count,
     }

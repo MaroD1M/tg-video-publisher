@@ -94,6 +94,7 @@ interface Job {
   stderr: string
   thumbnail_id: number | null
   skip_reason: string
+  phase: string
 }
 
 const jobs = ref<Job[]>([])
@@ -126,13 +127,15 @@ function connectWS() {
         output_size_bytes: 0, original_size_bytes: msg.original_size || 0,
         eta_sec: msg.eta_sec || 0, elapsed_sec: 0, speed: 0, fps: 0,
         stderr: '', thumbnail_id: msg.thumbnail_id || null, skip_reason: '',
+        phase: msg.phase || 'encoding',
       })
-    } else     if (msg.type === 'progress') {
+    } else if (msg.type === 'progress') {
       const job = jobs.value.find((j) => j.id === msg.job_id)
       if (job) {
         job.progress = msg.percent; job.eta_sec = msg.eta_sec || 0
         job.elapsed_sec = msg.elapsed_sec || 0; job.speed = msg.speed || 0; job.fps = msg.fps || 0
         job.status = 'running'
+        if (msg.phase) job.phase = msg.phase
       }
     } else if (msg.type === 'job_done') {
       const job = jobs.value.find((j) => j.id === msg.job_id)
@@ -344,6 +347,7 @@ async function load() {
               </div>
               <n-tag :type="job.status === 'running' ? 'warning' : 'default'" size="small" :bordered="false" round>{{ statusLabel(job.status) }}</n-tag>
             </div>
+            <n-text v-if="job.phase" depth="3" style="font-size:10px;display:block;margin-bottom:4px">{{ job.phase === 'encoding' ? '🎞 正在编码' : job.phase === 'retry_pass2' ? '🔄 二阶段重试' : job.phase }}</n-text>
             <n-progress type="line" :percentage="job.progress || 0" :height="16" :border-radius="8" :color="statusColor(job.status)" :indicator-placement="'inside'" :processing="job.status === 'running'" />
             <div style="margin-top: 8px; display: flex; align-items: center; gap: 10px; font-size: 12px;">
               <n-text depth="3" style="flex: 1">
@@ -355,14 +359,31 @@ async function load() {
               <n-space :size="6">
                 <template v-if="job.status === 'running'">
                   <n-button size="tiny" @click.stop="doPause(job.id)">暂停</n-button>
-                  <n-popconfirm :on-positive-click="() => doCancel(job.id)" positive-text="确定" negative-text="取消"><n-button size="tiny" @click.stop>取消</n-button>确定取消？</n-popconfirm>
+                  <n-popconfirm @positive-click="() => doCancel(job.id)">
+                    <template #trigger><n-button size="tiny" @click.stop>取消</n-button></template>
+                    <template #action><n-button size="tiny" type="primary" @click="() => doCancel(job.id)">确定</n-button><n-button size="tiny" style="margin-left:8px">取消</n-button></template>
+                    确定取消？
+                  </n-popconfirm>
                 </template>
                 <template v-if="job.status === 'paused'">
                   <n-button size="tiny" type="primary" @click.stop="doResume(job.id)">继续</n-button>
-                  <n-popconfirm :on-positive-click="() => doCancel(job.id)" positive-text="确定" negative-text="取消"><n-button size="tiny" @click.stop>取消</n-button>确定取消？</n-popconfirm>
+                  <n-popconfirm @positive-click="() => doCancel(job.id)">
+                    <template #trigger><n-button size="tiny" @click.stop>取消</n-button></template>
+                    <template #action><n-button size="tiny" type="primary" @click="() => doCancel(job.id)">确定</n-button><n-button size="tiny" style="margin-left:8px">取消</n-button></template>
+                    确定取消？
+                  </n-popconfirm>
+                  <n-popconfirm @positive-click="() => doDeleteJob(job.id)">
+                    <template #trigger><n-button size="tiny" type="error" @click.stop>删除</n-button></template>
+                    <template #action><n-button size="tiny" type="error" @click="() => doDeleteJob(job.id)">确定</n-button><n-button size="tiny" style="margin-left:8px">取消</n-button></template>
+                    确定删除？
+                  </n-popconfirm>
                 </template>
                 <template v-if="job.status === 'queued'">
-                  <n-popconfirm :on-positive-click="() => doDeleteJob(job.id)" positive-text="确定" negative-text="取消"><n-button size="tiny" type="error" @click.stop>删除</n-button>确定删除？</n-popconfirm>
+                  <n-popconfirm @positive-click="() => doDeleteJob(job.id)">
+                    <template #trigger><n-button size="tiny" type="error" @click.stop>删除</n-button></template>
+                    <template #action><n-button size="tiny" type="error" @click="() => doDeleteJob(job.id)">确定</n-button><n-button size="tiny" style="margin-left:8px">取消</n-button></template>
+                    确定删除？
+                  </n-popconfirm>
                 </template>
               </n-space>
             </div>
@@ -411,7 +432,11 @@ async function load() {
                 <n-button size="tiny" @click.stop="toggleExpand(job.id)">{{ expandedJobId === job.id ? '收起' : '详情' }}</n-button>
                 <n-button v-if="job.status === 'done' || job.status === 'skipped'" size="tiny" @click.stop="doPublish(job)">发布</n-button>
                 <n-button v-if="job.status === 'failed'" size="tiny" type="primary" @click.stop="doRetryWithConfig(job.id); initRetryConfig(job)">重试</n-button>
-                <n-popconfirm :on-positive-click="() => doDeleteJob(job.id)" positive-text="确定" negative-text="取消"><n-button size="tiny" type="error" @click.stop>删除</n-button>确定删除？</n-popconfirm>
+                <n-popconfirm @positive-click="() => doDeleteJob(job.id)">
+                  <template #trigger><n-button size="tiny" type="error" @click.stop>删除</n-button></template>
+                  <template #action><n-button size="tiny" type="error" @click="() => doDeleteJob(job.id)">确定</n-button><n-button size="tiny" style="margin-left:8px">取消</n-button></template>
+                  确定删除？
+                </n-popconfirm>
               </div>
               <div v-if="expandedJobId === job.id" style="margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--border-subtle)">
                 <n-text depth="3" style="font-size: 11px; white-space: pre-wrap; font-family: monospace; word-break: break-all; max-height: 200px; overflow-y: auto; display: block;">{{ job.stderr || '暂无详情' }}</n-text>
@@ -429,8 +454,16 @@ async function load() {
       </n-space>
 
       <n-space v-if="showCompleted" style="margin-top:8px" :size="6">
-        <n-popconfirm :on-positive-click="() => doBatchDelete('done')" positive-text="确定" negative-text="取消"><n-button size="tiny">删除已完成</n-button>确定删除所有已完成？</n-popconfirm>
-        <n-popconfirm :on-positive-click="() => doBatchDelete('')" positive-text="确定" negative-text="取消"><n-button size="tiny" type="error">删除全部历史</n-button>确定删除所有历史任务？</n-popconfirm>
+        <n-popconfirm @positive-click="() => doBatchDelete('done')">
+          <template #trigger><n-button size="tiny">删除已完成</n-button></template>
+          <template #action><n-button size="tiny" type="primary" @click="() => doBatchDelete('done')">确定</n-button><n-button size="tiny" style="margin-left:8px">取消</n-button></template>
+          确定删除所有已完成？
+        </n-popconfirm>
+        <n-popconfirm @positive-click="() => doBatchDelete('')">
+          <template #trigger><n-button size="tiny" type="error">删除全部历史</n-button></template>
+          <template #action><n-button size="tiny" type="error" @click="() => doBatchDelete('')">确定</n-button><n-button size="tiny" style="margin-left:8px">取消</n-button></template>
+          确定删除所有历史任务？
+        </n-popconfirm>
       </n-space>
   </PageContainer>
 </template>

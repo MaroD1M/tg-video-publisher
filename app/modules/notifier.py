@@ -68,7 +68,8 @@ async def notify_admin(message: str, event_type: str = "", variables: dict | Non
 
     for chat_id in target_ids:
         try:
-            await bot.send_message(chat_id=chat_id, text=template)
+            text = template[:4096]  # Telegram message limit
+            await bot.send_message(chat_id=chat_id, text=text)
         except TelegramError as e:
             _log.warning(f"Failed to notify {chat_id}: {e}")
 

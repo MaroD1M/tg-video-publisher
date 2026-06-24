@@ -47,7 +47,6 @@ class ItemStatus(str, enum.Enum):
 class QueueStrategy(str, enum.Enum):
     sequential = "sequential"
     random = "random"
-    rotate = "rotate"
 
 
 class PublishTaskStatus(str, enum.Enum):
@@ -193,6 +192,7 @@ class PublishTask(Base):
     video_id = Column(Integer, ForeignKey("videos.id", ondelete="SET NULL"), nullable=True)
     channel_id = Column(BigInteger, nullable=True)
     channel_name = Column(String(256))
+    schedule_id = Column(Integer, default=0)
     status = Column(SAEnum(PublishTaskStatus), default=PublishTaskStatus.queued)
     progress = Column(Float, default=0)
     elapsed_sec = Column(Float, default=0)

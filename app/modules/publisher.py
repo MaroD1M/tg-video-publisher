@@ -21,6 +21,7 @@ async def publish_video(
     video_template: str = "",
 ) -> dict:
     from app.bot.client import get_bot
+    from app.utils.helpers import get_setting
 
     bot = await get_bot()
     if not bot:
@@ -30,6 +31,12 @@ async def publish_video(
         return {"success": False, "error": f"Video file not found: {video_path}"}
     if not Path(thumb_path).exists():
         return {"success": False, "error": f"Thumbnail not found: {thumb_path}"}
+
+    # Read custom templates from settings if not explicitly passed
+    if not thumb_template:
+        thumb_template = await get_setting("thumb_caption_template", "")
+    if not video_template:
+        video_template = await get_setting("video_caption_template", "")
 
     # Build caption variables
     vars_dict = build_caption_vars(
@@ -50,8 +57,21 @@ async def publish_video(
     )
 
     thumb_msg_id = None
+    discussion_chat_id = None
 
-    # Send thumbnail to channel
+    # Resolve discussion group (linked chat) for comments section
+    try:
+        from app.database.connection import async_session
+        from app.database.models import TargetChat
+        from sqlalchemy import select
+        async with async_session() as db:
+            tc = await db.get(TargetChat, channel_id)
+            if tc and tc.linked_chat_id:
+                discussion_chat_id = tc.linked_chat_id
+    except Exception:
+        pass
+
+    # Send thumbnail to channel (always in main channel)
     try:
         with open(thumb_path, "rb") as f:
             thumb_msg = await bot.send_photo(
@@ -62,7 +82,7 @@ async def publish_video(
     except Exception as e:
         return {"success": False, "error": f"Thumbnail send failed: {e}"}
 
-    # Send video — single attempt, no artificial retry or timeout
+    # Send video — to discussion group if available, otherwise reply in channel
     try:
         with open(video_path, "rb") as f:
             kwargs = dict(
@@ -72,8 +92,12 @@ async def publish_video(
                 width=width if width else None,
                 height=height if height else None,
             )
-            kwargs_channel = {**kwargs, "reply_to_message_id": thumb_msg_id}
-            video_msg = await bot.send_video(chat_id=channel_id, **kwargs_channel)
+            if discussion_chat_id:
+                kwargs["reply_to_message_id"] = thumb_msg_id
+                video_msg = await bot.send_video(chat_id=discussion_chat_id, **kwargs)
+            else:
+                kwargs["reply_to_message_id"] = thumb_msg_id
+                video_msg = await bot.send_video(chat_id=channel_id, **kwargs)
 
             return {
                 "success": True,
@@ -81,7 +105,6 @@ async def publish_video(
                 "video_message_id": video_msg.message_id,
             }
     except Exception as e:
-        # Video failed — keep thumbnail visible in channel for context
         return {
             "success": False,
             "error": f"Video send failed: {e}",

@@ -32,6 +32,11 @@ async function cleanTmp() {
   catch { message.error('清理失败') }
 }
 
+async function cleanBotCache() {
+  try { await executeDiskCleanup({ clean_bot_cache: true }); message.success('Bot 缓存已清理'); load() }
+  catch { message.error('清理失败') }
+}
+
 onMounted(load)
 </script>
 
@@ -55,7 +60,11 @@ onMounted(load)
       <div v-for="f in data.output.orphans" :key="f.path" style="display:flex;align-items:center;gap:12px;padding:6px 0;border-bottom:1px solid var(--border-subtle);font-size:13px">
         <n-text style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ f.name }}</n-text>
         <n-text depth="3">{{ formatSize(f.size) }}</n-text>
-        <n-popconfirm :on-positive-click="() => del([f.path])" positive-text="确定" negative-text="取消"><n-button size="tiny" type="error">删除</n-button>确定删除？</n-popconfirm>
+        <n-popconfirm @positive-click="() => del([f.path])">
+          <template #trigger><n-button size="tiny" type="error">删除</n-button></template>
+          <template #action><n-button size="tiny" type="error" @click="() => del([f.path])">确定</n-button><n-button size="tiny" style="margin-left:8px">取消</n-button></template>
+          确定删除？
+        </n-popconfirm>
       </div>
     </n-card>
 
@@ -66,14 +75,31 @@ onMounted(load)
       <div v-for="f in data.thumbnails.orphans" :key="f.path" style="display:flex;align-items:center;gap:12px;padding:6px 0;border-bottom:1px solid var(--border-subtle);font-size:13px">
         <n-text style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ f.name }}</n-text>
         <n-text depth="3">{{ formatSize(f.size) }}</n-text>
-        <n-popconfirm :on-positive-click="() => del([f.path])" positive-text="确定" negative-text="取消"><n-button size="tiny" type="error">删除</n-button>确定删除？</n-popconfirm>
+        <n-popconfirm @positive-click="() => del([f.path])">
+          <template #trigger><n-button size="tiny" type="error">删除</n-button></template>
+          <template #action><n-button size="tiny" type="error" @click="() => del([f.path])">确定</n-button><n-button size="tiny" style="margin-left:8px">取消</n-button></template>
+          确定删除？
+        </n-popconfirm>
       </div>
     </n-card>
 
     <!-- Temp files -->
     <n-card v-if="data?.tmp.count" size="small" title="🗑 临时文件 (compress_workers)" style="margin-bottom: 16px">
       <n-text depth="3" style="font-size:12px;display:block;margin-bottom:8px">{{ data.tmp.count }} 个文件，占 {{ formatSize(data.tmp.size) }}</n-text>
-      <n-popconfirm :on-positive-click="cleanTmp" positive-text="确定" negative-text="取消"><n-button size="small" type="warning">一键清理</n-button>确定清理所有临时文件？</n-popconfirm>
+      <n-popconfirm @positive-click="cleanTmp">
+        <template #trigger><n-button size="small" type="warning">一键清理</n-button></template>
+        <template #action><n-button size="tiny" type="warning" @click="cleanTmp">确定</n-button><n-button size="tiny" style="margin-left:8px">取消</n-button></template>
+        确定清理所有临时文件？
+      </n-popconfirm>
+    </n-card>
+    <!-- Bot cache -->
+    <n-card v-if="data?.bot_cache.size > 0" size="small" title="🗑 Bot API 缓存 (bot-api-data)" style="margin-bottom: 16px">
+      <n-text depth="3" style="font-size:12px;display:block;margin-bottom:8px">占 {{ formatSize(data.bot_cache.size) }}</n-text>
+      <n-popconfirm @positive-click="cleanBotCache">
+        <template #trigger><n-button size="small" type="error">清理缓存</n-button></template>
+        <template #action><n-button size="tiny" type="error" @click="cleanBotCache">确定</n-button><n-button size="tiny" style="margin-left:8px">取消</n-button></template>
+        确定清理 Bot API 缓存？此操作可能导致 Bot API 重新登录
+      </n-popconfirm>
     </n-card>
   </PageContainer>
 </template>

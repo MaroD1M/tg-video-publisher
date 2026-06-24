@@ -51,13 +51,21 @@ async def _publish_worker():
 async def _execute_publish(task_id: int):
     start_time = time.time()
     cancel_event = asyncio.Event()
+    step_logs = []
+    video_name = "Unknown"
+    channel_name = ""
 
     # Load task data
     async with async_session() as db:
         task = await db.get(PublishTask, task_id)
-        if not task or task.status != PublishTaskStatus.queued:
+        if not task:
+            import logging
+            logging.getLogger("tgvp.publish").error(f"Publish task {task_id} not found, skipping")
+            return
+        if task.status != PublishTaskStatus.queued:
             return
         task.status = PublishTaskStatus.running
+        task.step_log = json.dumps(step_logs)
         await db.commit()
 
         video = await db.get(Video, task.video_id) if task.video_id else None
@@ -77,9 +85,7 @@ async def _execute_publish(task_id: int):
     cancel_watcher_task = asyncio.create_task(_cancel_watcher())
 
     try:
-        step_logs = []
-
-        # Step 1: Resolve path and thumbnail
+        # Step 1: Resolve local files and thumbnail
         thumb_start = time.time()
         from app.modules.publisher import ensure_thumbnail, resolve_video_path
 
@@ -98,11 +104,11 @@ async def _execute_publish(task_id: int):
             thumb_id = thumb_row
 
         elapsed = time.time() - thumb_start
-        step_logs.append({"step":"thumbnail","elapsed":round(elapsed,1),"result":"done"})
+        step_logs.append({"step":"prepare","elapsed":round(elapsed,1),"result":"done"})
         await broadcast_publish({
             "type": "publish_progress", "task_id": task_id, "video_id": task.video_id,
             "video_name": video_name, "channel_name": channel_name,
-            "step": "uploading", "progress": 10, "elapsed_sec": round(elapsed), "eta_sec": 0,
+            "step": "sending", "progress": 10, "elapsed_sec": round(elapsed), "eta_sec": 0,
             "thumbnail_id": thumb_id, "step_logs": step_logs,
         })
 
@@ -111,12 +117,42 @@ async def _execute_publish(task_id: int):
 
         # Step 2: Publish to Telegram
         from app.modules.publisher import publish_video
+        from app.utils.helpers import get_setting
+
+        # Resolve correct width/height: use compress target if compressed, else original
+        pub_width = video_obj.width or 0
+        pub_height = video_obj.height or 0
+        if vpath != video_obj.filepath:
+            from app.database.models import CompressJob, JobStatus as CJStatus
+            comp_job = (await db.execute(
+                select(CompressJob).where(
+                    CompressJob.video_id == video_obj.id,
+                    CompressJob.status == CJStatus.done,
+                ).order_by(CompressJob.id.desc()).limit(1)
+            )).scalar_one_or_none()
+            if comp_job:
+                if comp_job.target_width > 0:
+                    pub_width = comp_job.target_width
+                if comp_job.target_height > 0:
+                    pub_height = comp_job.target_height
+
+        # Resolve templates: schedule templates take priority over global settings
+        thumb_tpl = ""
+        video_tpl = ""
+        if task.schedule_id:
+            from app.database.models import Schedule
+            sched = await db.get(Schedule, task.schedule_id)
+            if sched:
+                thumb_tpl = sched.thumb_caption_template or ""
+                video_tpl = sched.video_caption_template or ""
 
         result = await publish_video(
             video_path=vpath, thumb_path=thumb_path, channel_id=channel_id,
             video_filename=video_name, duration_sec=video_obj.duration_sec,
             size_bytes=vsize, original_size_bytes=size_bytes,
-            width=video_obj.width or 0, height=video_obj.height or 0,
+            width=pub_width, height=pub_height,
+            thumb_template=thumb_tpl,
+            video_template=video_tpl,
         )
 
         if cancel_event.is_set():
@@ -126,7 +162,8 @@ async def _execute_publish(task_id: int):
 
         if result.get("success"):
             upload_elapsed = time.time() - thumb_start
-            step_logs.append({"step":"upload","elapsed":round(upload_elapsed,1),"result":"done"})
+            upload_speed = round(vsize / upload_elapsed / 1024) if upload_elapsed > 0 and vsize > 0 else 0
+            step_logs.append({"step":"send","elapsed":round(upload_elapsed,1),"result":"done","speed_kbs":upload_speed})
             async with async_session() as db:
                 task = await db.get(PublishTask, task_id)
                 if task:
@@ -160,7 +197,8 @@ async def _execute_publish(task_id: int):
             })
         else:
             upload_elapsed = time.time() - thumb_start
-            step_logs.append({"step":"upload","elapsed":round(upload_elapsed,1),"result":"failed","error":result.get("error","")[:200]})
+            upload_speed = round(vsize / upload_elapsed / 1024) if upload_elapsed > 0 and vsize > 0 else 0
+            step_logs.append({"step":"send","elapsed":round(upload_elapsed,1),"result":"failed","error":result.get("error","")[:200],"speed_kbs":upload_speed})
             async with async_session() as db:
                 task = await db.get(PublishTask, task_id)
                 if task:
@@ -175,23 +213,29 @@ async def _execute_publish(task_id: int):
             })
 
     except asyncio.CancelledError:
+        if not step_logs:
+            step_logs = [{"step": "cancelled", "elapsed": round(time.time() - start_time), "result": "cancelled"}]
         async with async_session() as db:
             task = await db.get(PublishTask, task_id)
             if task and task.status == PublishTaskStatus.running:
                 task.status = PublishTaskStatus.cancelled
                 task.elapsed_sec = round(time.time() - start_time)
+                task.step_log = json.dumps(step_logs)
                 await db.commit()
         await broadcast_publish({
             "type": "publish_cancelled", "task_id": task_id,
             "video_name": video_name,
         })
     except Exception as e:
+        if not step_logs:
+            step_logs = [{"step": "error", "elapsed": round(time.time() - start_time), "result": "failed", "error": str(e)[:200]}]
         async with async_session() as db:
             task = await db.get(PublishTask, task_id)
             if task:
                 task.status = PublishTaskStatus.failed
                 task.error_log = str(e)[:500]
                 task.elapsed_sec = round(time.time() - start_time)
+                task.step_log = json.dumps(step_logs)
                 await db.commit()
         await broadcast_publish({
             "type": "publish_error", "task_id": task_id, "video_id": task.video_id,
@@ -201,12 +245,13 @@ async def _execute_publish(task_id: int):
         cancel_watcher_task.cancel()
 
 
-async def enqueue_publish(video_id: int, channel_id: int, channel_name: str = "") -> int:
+async def enqueue_publish(video_id: int, channel_id: int, channel_name: str = "", schedule_id: int = 0) -> int:
     """Create a PublishTask and enqueue it. Returns the new task id."""
     async with async_session() as db:
         task = PublishTask(
             video_id=video_id, channel_id=channel_id,
             channel_name=channel_name or str(channel_id),
+            schedule_id=schedule_id,
             status=PublishTaskStatus.queued,
         )
         db.add(task)

@@ -169,14 +169,14 @@ let reconnectAttempts = 0
 
 interface ProgressJob {
   id: number; video_name: string; status: string; progress: number; eta_sec: number
-  elapsed_sec: number; speed: number; fps: number
+  elapsed_sec: number; speed: number; fps: number; error: string
 }
 const runningJobs = ref<ProgressJob[]>([])
 
 interface PublishTask {
   id: number; video_id: number | null; video_name: string; channel_name: string
   status: string; progress: number; elapsed_sec: number; eta_sec: number
-  thumbnail_id: number | null
+  thumbnail_id: number | null; error: string
 }
 const publishTasks = ref<PublishTask[]>([])
 
@@ -188,7 +188,7 @@ function connectWS() {
     const msg = JSON.parse(e.data)
     const idx = runningJobs.value.findIndex(j => j.id === msg.job_id)
     if (msg.type === 'job_start') {
-      if (idx < 0) runningJobs.value.push({ id: msg.job_id, video_name: msg.video, status: 'running', progress: 0, eta_sec: msg.eta_sec || 0, elapsed_sec: 0, speed: 0, fps: 0 })
+      if (idx < 0) runningJobs.value.push({ id: msg.job_id, video_name: msg.video, status: 'running', progress: 0, eta_sec: msg.eta_sec || 0, elapsed_sec: 0, speed: 0, fps: 0, error: '' })
     } else if (msg.type === 'progress') {
       if (idx >= 0) { runningJobs.value[idx].progress = msg.percent; runningJobs.value[idx].eta_sec = msg.eta_sec || 0; runningJobs.value[idx].elapsed_sec = msg.elapsed_sec || 0; runningJobs.value[idx].speed = msg.speed || 0; runningJobs.value[idx].fps = msg.fps || 0 }
     } else if (msg.type === 'job_done') {
@@ -196,15 +196,15 @@ function connectWS() {
     } else if (msg.type === 'job_skip') {
       if (idx >= 0) { runningJobs.value[idx].status = 'skipped'; runningJobs.value[idx].progress = 100 }
     } else if (msg.type === 'job_error') {
-      if (idx >= 0) runningJobs.value[idx].status = 'failed'
+      if (idx >= 0) { runningJobs.value[idx].status = 'failed'; runningJobs.value[idx].error = msg.error || '' }
     } else if (msg.type === 'publish_progress') {
       let t = publishTasks.value.find(p => p.id === msg.task_id)
-      if (!t) { t = { id: msg.task_id, video_id: msg.video_id, video_name: msg.video_name, channel_name: msg.channel_name || '', status: 'running', progress: msg.progress || 5, elapsed_sec: msg.elapsed_sec || 0, eta_sec: msg.eta_sec || 0, thumbnail_id: msg.thumbnail_id || null }; publishTasks.value.unshift(t) }
+      if (!t) { t = { id: msg.task_id, video_id: msg.video_id, video_name: msg.video_name, channel_name: msg.channel_name || '', status: 'running', progress: msg.progress || 5, elapsed_sec: msg.elapsed_sec || 0, eta_sec: msg.eta_sec || 0, thumbnail_id: msg.thumbnail_id || null, error: '' }; publishTasks.value.unshift(t) }
       else { t.progress = msg.progress || t.progress; t.elapsed_sec = msg.elapsed_sec || 0; t.eta_sec = msg.eta_sec || 0; t.thumbnail_id = msg.thumbnail_id || t.thumbnail_id; t.status = msg.step === 'uploading' ? 'uploading' : 'running' }
     } else if (msg.type === 'publish_done') {
       const t = publishTasks.value.find(p => p.id === msg.task_id); if (t) { t.status = 'done'; t.progress = 100 }
     } else if (msg.type === 'publish_error') {
-      const t = publishTasks.value.find(p => p.id === msg.task_id); if (t) t.status = 'failed'
+      const t = publishTasks.value.find(p => p.id === msg.task_id); if (t) { t.status = 'failed'; t.error = msg.error || '' }
     } else if (msg.type === 'publish_cancelled') {
       const t = publishTasks.value.find(p => p.id === msg.task_id); if (t) t.status = 'cancelled'
     }
@@ -314,7 +314,7 @@ const hasActiveTasks = computed(() => runningJobs.value.length > 0 || publishTas
               <template v-if="job.status === 'running'">{{ job.elapsed_sec ? Math.floor(job.elapsed_sec/60)+'m'+Math.floor(job.elapsed_sec%60)+'s' : '' }}<template v-if="job.eta_sec"> · 剩余 {{ Math.floor(job.eta_sec/60) }}m{{ Math.floor(job.eta_sec%60) }}s</template></template>
               <template v-else-if="job.status === 'done'">完成</template>
               <template v-else-if="job.status === 'skipped'">已跳过</template>
-              <template v-else-if="job.status === 'failed'">失败</template>
+              <template v-else-if="job.status === 'failed'">失败<template v-if="job.error">: {{ job.error.slice(0,40) }}</template></template>
             </n-text>
           </div>
           <n-progress type="line" :percentage="job.progress || 0" :height="12" :border-radius="6"
@@ -338,7 +338,7 @@ const hasActiveTasks = computed(() => runningJobs.value.length > 0 || publishTas
             :color="t.status === 'done' ? 'var(--color-green)' : t.status === 'failed' ? 'var(--color-red)' : t.status === 'uploading' ? 'var(--color-purple)' : 'var(--color-purple)'"
             :indicator-placement="'inside'" :processing="t.status === 'running' || t.status === 'uploading'" />
           <n-button v-if="t.status === 'running' || t.status === 'uploading' || t.status === 'queued'" size="tiny" style="margin-top:4px" @click="cancelPublish(t.id)">取消</n-button>
-          <n-button v-if="t.status === 'failed' || t.status === 'cancelled'" size="tiny" type="primary" style="margin-top:4px" @click="retryPublish(t.id)">重试</n-button>
+              <n-text v-if="t.status === 'failed' || t.status === 'cancelled'" size="tiny" type="error" style="margin-top:4px;display:block">{{ t.error ? t.error.slice(0,60) : '任务失败' }}</n-text>
         </div>
       </template>
       <n-button size="tiny" style="margin-top: 6px" @click="clearProgress">清除已完成</n-button>

@@ -15,6 +15,20 @@ const route = useRoute()
 const pendingVideos = ref<any[]>([])
 const pendingChannelId = ref<number | null>(null)
 const channelOpts = ref<{ label: string; value: number; label_full: string }[]>([])
+const recentToasts = new Map<string, number>()  // video_name -> timestamp, for dedup
+
+function dedupedToast(type: 'success'|'error', videoName: string, msg: string) {
+  const now = Date.now()
+  const last = recentToasts.get(videoName) || 0
+  if (now - last < 5000) return  // same file within 5s → skip
+  recentToasts.set(videoName, now)
+  if (recentToasts.size > 100) {
+    // Clean old entries
+    for (const [k, v] of recentToasts) { if (now - v > 10000) recentToasts.delete(k) }
+  }
+  if (type === 'success') message.success(msg)
+  else message.error(msg)
+}
 
 async function initPending() {
   const ids = route.query.ids as string
@@ -90,12 +104,12 @@ function connectWS() {
     } else if (msg.type === 'publish_done') {
       const t = tasks.value.find(j => j.id === msg.task_id)
       if (t) { t.status = 'done'; t.progress = 100 }
-      message.success(`发布成功: ${msg.video_name}`)
+      dedupedToast('success', msg.video_name, `发布成功: ${msg.video_name}`)
       load()
     } else if (msg.type === 'publish_error') {
       const t = tasks.value.find(j => j.id === msg.task_id)
       if (t) { t.status = 'failed'; t.error_log = msg.error || '' }
-      message.error(`发布失败: ${msg.video_name}`)
+      dedupedToast('error', msg.video_name, `发布失败: ${msg.video_name}`)
     } else if (msg.type === 'publish_cancelled') {
       const t = tasks.value.find(j => j.id === msg.task_id)
       if (t) t.status = 'cancelled'
@@ -320,12 +334,14 @@ onUnmounted(() => {
     <div v-if="completedTasks.length" style="margin-top: 20px">
       <n-space :size="6" style="margin-bottom: 8px;">
         <n-button size="tiny" @click="showCompleted = !showCompleted">{{ showCompleted ? '收起历史' : `展开历史 (${completedTasks.length})` }}</n-button>
-        <n-popconfirm :on-positive-click="doRetryAllFailed" positive-text="确定" negative-text="取消">
+        <n-popconfirm @positive-click="doRetryAllFailed">
           <template #trigger><n-button size="tiny" type="primary">重试全部失败</n-button></template>
+          <template #action><n-button size="tiny" type="primary" @click="doRetryAllFailed">确定</n-button><n-button size="tiny" style="margin-left:8px">取消</n-button></template>
           确定重试所有失败任务？
         </n-popconfirm>
-        <n-popconfirm :on-positive-click="doDeleteAllCompleted" positive-text="确定" negative-text="取消">
+        <n-popconfirm @positive-click="doDeleteAllCompleted">
           <template #trigger><n-button size="tiny" type="error">删除已完成</n-button></template>
+          <template #action><n-button size="tiny" type="error" @click="doDeleteAllCompleted">确定</n-button><n-button size="tiny" style="margin-left:8px">取消</n-button></template>
           确定删除所有已完成任务？
         </n-popconfirm>
       </n-space>
@@ -355,10 +371,9 @@ onUnmounted(() => {
               <n-button v-if="task.status === 'done'" size="tiny" @click.stop="doRetry(task.id)">重新发布</n-button>
               <n-button v-if="task.thumbnail_id" size="tiny" @click.stop="doRegenerateThumb(task.id)">重生成缩略图</n-button>
               <span @click.stop>
-                <n-popconfirm :on-positive-click="() => doDelete(task.id)" positive-text="确定" negative-text="取消">
-                  <template #trigger>
-                    <n-button size="tiny" type="error">删除</n-button>
-                  </template>
+                <n-popconfirm @positive-click="() => doDelete(task.id)">
+                  <template #trigger><n-button size="tiny" type="error">删除</n-button></template>
+                  <template #action><n-button size="tiny" type="error" @click="() => doDelete(task.id)">确定</n-button><n-button size="tiny" style="margin-left:8px">取消</n-button></template>
                   确定删除此记录？
                 </n-popconfirm>
               </span>
@@ -367,7 +382,7 @@ onUnmounted(() => {
               <div v-if="task.step_log && task.step_log.length" style="margin-bottom: 6px">
                 <n-text depth="3" style="font-size: 11px; display: block; margin-bottom: 2px;">步骤日志：</n-text>
                 <n-text v-for="(s,i) in task.step_log" :key="i" depth="3" style="font-size: 11px; display: block;">
-                  {{ i+1 }}. {{ s.step }} — {{ s.elapsed }}s {{ s.result }}{{ s.error ? ': '+s.error.slice(0,60) : '' }}
+                  {{ i+1 }}. {{ s.step }} — {{ s.elapsed }}s {{ s.result }}{{ s.speed_kbs ? ' · '+s.speed_kbs+'KB/s' : '' }}{{ s.error ? ': '+s.error.slice(0,60) : '' }}
                 </n-text>
               </div>
               <n-text v-if="task.error_log" depth="3" style="font-size: 11px; white-space: pre-wrap; font-family: monospace; word-break: break-all; max-height: 200px; overflow-y: auto; display: block;">{{ task.error_log }}</n-text>

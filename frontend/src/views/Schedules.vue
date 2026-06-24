@@ -215,10 +215,17 @@ const queueColumns = [
   { title: '#', key: 'sort_order', width: 40 },
   { title: '视频', key: 'video_name', ellipsis: { tooltip: true } },
   {
-    title: '状态', key: 'status', width: 80,
+    title: '状态', key: 'status', width: 120,
     render: (r: any) => {
       const labels: Record<string, string> = { queued: '排队中', publishing_thumb: '发送缩略图', publishing_video: '发送视频', published: '已发布', failed: '失败', skipped: '已跳过' }
-      return h(NTag, { type: r.status === 'published' ? 'success' : r.status === 'failed' ? 'error' : 'default', size: 'small' }, { default: () => labels[r.status] || r.status })
+      const tag = h(NTag, { type: r.status === 'published' ? 'success' : r.status === 'failed' ? 'error' : 'default', size: 'small' }, { default: () => labels[r.status] || r.status })
+      if (r.status === 'failed' && r.error_msg) {
+        return h('div', { style: 'display:flex;flex-direction:column;gap:2px' }, [
+          tag,
+          h(NText, { depth: '3', style: 'font-size:10px;word-break:break-all' }, { default: () => r.error_msg }),
+        ])
+      }
+      return tag
     },
   },
   {
@@ -310,7 +317,6 @@ onMounted(() => {
               :options="[
                 { label: '顺序发布', value: 'sequential' },
                 { label: '随机发布', value: 'random' },
-                { label: '循环发布', value: 'rotate' },
               ]"
             />
           </n-form-item>
