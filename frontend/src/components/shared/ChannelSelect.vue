@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { onMounted } from 'vue'
 import { NSelect } from 'naive-ui'
 import { useChannels } from '@/composables/useChannels'
 
@@ -17,7 +18,8 @@ const emit = defineEmits<{
   'update:modelValue': [value: number | null]
 }>()
 
-const { channelOptions } = useChannels()
+const { channelOptions, load } = useChannels()
+onMounted(load)
 </script>
 
 <template>

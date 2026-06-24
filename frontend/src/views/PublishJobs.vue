@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, h } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import {
-  NCard, NProgress, NTag, NText, NEmpty, NSpace, NButton, NImage,
-  NPopconfirm, useMessage,
+  NCard, NProgress, NText, NEmpty, NSpace, NButton, NImage,
+  NPopconfirm, NDivider, NGrid, NGi, useMessage,
 } from 'naive-ui'
 import {
   fetchPublishTasks, cancelPublishTask, retryPublishTask, getThumbnailImage,
@@ -84,7 +84,6 @@ const stats = computed(() => {
 const activeTasks = computed(() => tasks.value.filter(t => t.status === 'queued' || t.status === 'running' || t.status === 'uploading'))
 const completedTasks = computed(() => tasks.value.filter(t => t.status === 'done' || t.status === 'failed' || t.status === 'cancelled'))
 
-let wsMounted = false
 let elapsedTimer: number | undefined
 
 function startElapsedTimer() {
@@ -170,7 +169,6 @@ async function doDeleteAllFailed() {
 }
 
 onMounted(() => {
-  wsMounted = true
   load()
   connectWS()
   initPending()
@@ -178,7 +176,6 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  wsMounted = false
   if (elapsedTimer) clearInterval(elapsedTimer)
 })
 </script>
@@ -186,7 +183,7 @@ onUnmounted(() => {
 <template>
   <PageContainer>
     <PageHeader title="发布任务" icon="📤">
-      <template v-if="completedTasks.length" #actions>
+      <template v-if="completedTasks.length">
         <n-space :size="8">
           <n-button size="small" @click="showCompleted = !showCompleted">
             {{ showCompleted ? '收起历史' : '展开历史' }} ({{ completedTasks.length }})

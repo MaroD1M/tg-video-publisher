@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { ref, onMounted, h, computed } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
-  NCard, NProgress, NTag, NText, NEmpty, NSpace, NButton, NInputNumber,
-  NPopconfirm, NImage, NGrid, NGi, NStatistic, NSelect, NIcon, useMessage
+  NCard, NProgress, NText, NEmpty, NSpace, NButton, NInputNumber,
+  NPopconfirm, NGrid, NGi, NSelect, NDivider, useMessage
 } from 'naive-ui'
-import { TimeOutline } from '@vicons/ionicons5'
 import {
   fetchCompressJobs, cancelCompressJob, pauseJob, resumeJob, retryCompressJob,
   getThumbnailImage, publishNow, deleteCompressJob, batchDeleteCompress,
@@ -19,7 +18,6 @@ import type { CompressJobData, Video } from '@/types'
 import PageHeader from '@/components/shared/PageHeader.vue'
 import PageContainer from '@/components/shared/PageContainer.vue'
 import StatusTag from '@/components/shared/StatusTag.vue'
-import ChannelSelect from '@/components/shared/ChannelSelect.vue'
 import StatsGrid from '@/components/shared/StatsGrid.vue'
 
 const message = useMessage()
@@ -149,8 +147,6 @@ const stats = computed(() => {
 const activeJobs = computed(() => jobs.value.filter(j => j.status === 'running' || j.status === 'queued' || j.status === 'paused'))
 const completedJobs = computed(() => jobs.value.filter(j => j.status === 'done' || j.status === 'skipped' || j.status === 'failed' || j.status === 'cancelled'))
 
-let wsMounted = false
-
 async function load() {
   try { jobs.value = ((await fetchCompressJobs()).list || []) as CompressJobData[] } catch {}
 }
@@ -187,7 +183,6 @@ async function doSettingsChange(jobId: number, updates: any) {
 }
 
 onMounted(async () => {
-  wsMounted = true
   try {
     const data = await settingsStore.loadSettings()
     compressPreset = data.compress_preset || 'balanced'
@@ -200,13 +195,6 @@ onMounted(async () => {
   connectWS()
   initPendingVideos()
 })
-
-const channelOptions = computed(() =>
-  channels.value.map(c => {
-    const label = c.alias || c.chat_name || String(c.chat_id)
-    return   { label: label.length > 16 ? label.slice(0, 14) + '…' : label, value: c.chat_id }
-  })
-)
 
 function getPendingPreset(vid: number) {
   if (!pendingConfig.value[vid]) updatePendingConfig(vid, 'preset', compressPreset)
@@ -227,7 +215,7 @@ function setPendingSize(vid: number, val: number | null) {
 <template>
   <PageContainer>
     <PageHeader title="压缩任务" icon="⚡">
-      <template v-if="completedJobs.length" #actions>
+      <template v-if="completedJobs.length">
         <n-space :size="8">
           <n-button size="small" @click="showCompleted = !showCompleted">
             {{ showCompleted ? '收起历史' : '展开历史' }} ({{ completedJobs.length }})
@@ -293,6 +281,8 @@ function setPendingSize(vid: number, val: number | null) {
                 <template v-if="job.eta_sec"> · 剩余 {{ Math.floor((job.eta_sec||0)/60) }}m</template>
               </n-text>
               <div style="margin-left:auto;display:flex;gap:4px">
+                <n-button v-if="job.status==='running'" size="tiny" @click.stop="doPause(job.id)">暂停</n-button>
+                <n-button v-if="job.status==='paused'" size="tiny" type="primary" @click.stop="doResume(job.id)">继续</n-button>
                 <n-popconfirm @positive-click="() => doCancel(job.id)" v-if="job.status==='running'"><template #trigger><n-button size="tiny" type="error">取消</n-button></template>确定取消？</n-popconfirm>
                 <n-popconfirm @positive-click="() => doCancel(job.id)" v-if="job.status==='queued'||job.status==='paused'"><template #trigger><n-button size="tiny" type="error">取消</n-button></template>确定取消？</n-popconfirm>
                 <n-popconfirm @positive-click="() => doDeleteJob(job.id)"><template #trigger><n-button size="tiny" type="error">删除</n-button></template>确定删除？</n-popconfirm>
@@ -311,6 +301,8 @@ function setPendingSize(vid: number, val: number | null) {
         <n-text style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ job.video_name }}</n-text>
         <StatusTag :status="job.status" />
         <n-text depth="3" style="font-size:11px" v-if="job.output_size">{{ formatSize(job.output_size) }}</n-text>
+        <n-button v-if="job.status==='done'||job.status==='skipped'||job.status==='failed'||job.status==='cancelled'" size="tiny" @click.stop="doPublish(job.id)">发布</n-button>
+        <n-button v-if="(job.status==='done'||job.status==='skipped') && !job.thumbnail_id" size="tiny" @click.stop="doCreateThumb(job.id)">🖼 缩略图</n-button>
         <n-popconfirm @positive-click="() => doRetry(job.id)"><template #trigger><n-button size="tiny" type="primary">重试</n-button></template>确定重试？</n-popconfirm>
         <n-popconfirm @positive-click="() => doDeleteJob(job.id)"><template #trigger><n-button size="tiny" type="error">删除</n-button></template>确定删除？</n-popconfirm>
       </div>
