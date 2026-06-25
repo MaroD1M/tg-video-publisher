@@ -12,7 +12,7 @@ import {
 } from '@/api/client'
 import { useWebSocket } from '@/composables/useWebSocket'
 import { useChannels } from '@/composables/useChannels'
-import { formatChannelLabel } from '@/utils/format'
+import { formatChannelLabel, formatElapsed } from '@/utils/format'
 import type { Video } from '@/types'
 import PageHeader from '@/components/shared/PageHeader.vue'
 import PageContainer from '@/components/shared/PageContainer.vue'
@@ -177,8 +177,6 @@ async function doDeleteAllFailed() {
 }
 
 function thumbUrl(id: number | null) { return id ? getThumbnailImage(id) : '' }
-function formatSize(bytes: number): string { if (!bytes) return '-'; if (bytes < 1e9) return (bytes/1e6).toFixed(1)+' MB'; return (bytes/1e9).toFixed(2)+' GB' }
-function formatElapsed(sec: number): string { if (!sec) return ''; const m = Math.floor(sec/60), s = Math.floor(sec%60); return m>0?`${m}分${s}秒`:`${s}秒` }
 function statusColor(s: string): string { return { running:'var(--color-purple)',uploading:'var(--color-purple)',done:'var(--color-green)',failed:'var(--color-red)',cancelled:'#aaa',queued:'#5e9eff' }[s]||'#888' }
 function statusLabel(s: string): string { return { running:'处理中',uploading:'上传中',done:'已完成',failed:'失败',cancelled:'已取消',queued:'排队中' }[s]||s }
 

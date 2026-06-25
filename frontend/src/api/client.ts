@@ -23,9 +23,7 @@ api.interceptors.response.use(
         window.location.replace('/login')
       }
     }
-    const detail = err.response?.data?.detail || err.message
-    const msg = typeof detail === 'string' ? detail : '请求失败'
-    return Promise.reject(new Error(msg))
+    return Promise.reject(err)
   }
 )
 

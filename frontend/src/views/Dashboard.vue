@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { NCard, NGrid, NGi, NStatistic, NProgress, NTag, NText, NSpin, NTooltip, useMessage } from 'naive-ui'
+import { NCard, NGrid, NGi, NStatistic, NProgress, NText, NSpin, NTooltip, useMessage } from 'naive-ui'
 import PageHeader from '@/components/shared/PageHeader.vue'
 import PageContainer from '@/components/shared/PageContainer.vue'
 import StatusDot from '@/components/shared/StatusDot.vue'
+import StatusTag from '@/components/shared/StatusTag.vue'
 import { fetchStats, fetchDiskUsage, fetchLogs } from '@/api/client'
 
 const message = useMessage()
@@ -99,9 +100,7 @@ function botStatus(): 'ok' | 'error' | 'unknown' {
       <n-card title="最近发布" size="small">
         <div v-if="recentLogs.length" style="display:flex;flex-direction:column;gap:6px">
           <div v-for="log in recentLogs" :key="log.id" style="display:flex;align-items:center;gap:8px">
-            <n-tag :type="log.success ? 'success' : 'error'" size="small" :bordered="false" round>
-              {{ log.success ? '成功' : '失败' }}
-            </n-tag>
+            <StatusTag :status="log.success ? 'success' : 'failed'" size="small" />
             <n-text style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px">{{ log.filename || 'Unknown' }}</n-text>
             <n-text depth="3" style="font-size:11px;flex-shrink:0;white-space:nowrap">
               {{ log.published_at ? new Date(log.published_at).toLocaleString('zh-CN', {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '' }}

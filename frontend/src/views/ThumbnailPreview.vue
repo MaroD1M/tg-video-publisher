@@ -2,6 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { NCard, NEmpty, NImage, NGrid, NGi, NText, NTag, NSpin, NButton, NSpace, NPopconfirm, useMessage } from 'naive-ui'
 import { fetchThumbnails, getThumbnailImage, regenerateThumbnail, deleteThumbnail } from '@/api/client'
+import { formatSize } from '@/utils/format'
 import PageHeader from '@/components/shared/PageHeader.vue'
 import PageContainer from '@/components/shared/PageContainer.vue'
 
@@ -56,10 +57,6 @@ async function doBatchDelete() {
   selectedIds.value = new Set()
 }
 
-function formatSize(bytes: number) {
-  if (!bytes) return '-'
-  return bytes < 1_000_000 ? (bytes / 1_000).toFixed(1) + ' KB' : (bytes / 1_000_000).toFixed(1) + ' MB'
-}
 </script>
 
 <template>

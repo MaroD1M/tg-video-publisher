@@ -2,6 +2,7 @@
 import { ref, onMounted, h } from 'vue'
 import { NEmpty, NCard, NDataTable, NTag, NText, NSpin, NInput, NSelect, NSpace, NButton, NDatePicker, NImage, NPopconfirm, useMessage } from 'naive-ui'
 import { fetchLogsWithFilters, fetchChats, retryPublishTask, getThumbnailImage, deletePublishLog } from '@/api/client'
+import { formatSize } from '@/utils/format'
 import PageHeader from '@/components/shared/PageHeader.vue'
 import PageContainer from '@/components/shared/PageContainer.vue'
 
@@ -113,12 +114,6 @@ async function doRetryFromHistory(row: any) {
 async function doDeleteLog(logId: number) {
   try { await deletePublishLog(logId); message.success('已删除'); load() }
   catch { message.error('删除失败') }
-}
-
-function formatSize(bytes: number): string {
-  if (!bytes) return '-'
-  if (bytes < 1_000_000_000) return (bytes / 1_000_000).toFixed(1) + ' MB'
-  return (bytes / 1_000_000_000).toFixed(2) + ' GB'
 }
 
 onMounted(() => {

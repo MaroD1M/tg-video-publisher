@@ -40,7 +40,9 @@ export const useTaskStore = defineStore('tasks', () => {
   }
 
   function clearDone() {
-    runningJobs.value = runningJobs.value.filter(j => j.status === 'running')
+    runningJobs.value = runningJobs.value.filter(j =>
+      j.status === 'running' || j.status === 'queued' || j.status === 'paused'
+    )
     publishTasks.value = publishTasks.value.filter(
       t => t.status === 'running' || t.status === 'uploading' || t.status === 'queued'
     )

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { NForm, NFormItem, NInput, NButton, NText, NModal, NSpace, NSteps, NStep, useMessage } from 'naive-ui'
+import { NForm, NFormItem, NInput, NButton, NText, NModal, NSpace, NSteps, NStep, NDivider, useMessage } from 'naive-ui'
 import { login, requestPasswordReset, confirmPasswordReset } from '@/api/client'
 
 const router = useRouter()

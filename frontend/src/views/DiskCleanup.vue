@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { NCard, NText, NButton, NGrid, NGi, NStatistic, NPopconfirm, NEmpty, useMessage } from 'naive-ui'
+import { NCard, NText, NButton, NStatistic, NPopconfirm, NEmpty, useMessage } from 'naive-ui'
 import { fetchDiskCleanup, executeDiskCleanup } from '@/api/client'
+import { formatSize } from '@/utils/format'
 import PageHeader from '@/components/shared/PageHeader.vue'
 import PageContainer from '@/components/shared/PageContainer.vue'
+import StatsGrid from '@/components/shared/StatsGrid.vue'
 
 const message = useMessage()
 const data = ref<any>(null)
@@ -14,14 +16,6 @@ async function load() {
   try { data.value = await fetchDiskCleanup() } catch { message.error('加载失败') }
   loading.value = false
 }
-
-function formatSize(bytes: number): string {
-  if (!bytes) return '0 B'
-  if (bytes < 1e6) return (bytes / 1e3).toFixed(1) + ' KB'
-  if (bytes < 1e9) return (bytes / 1e6).toFixed(1) + ' MB'
-  return (bytes / 1e9).toFixed(2) + ' GB'
-}
-
 async function del(paths: string[]) {
   try { await executeDiskCleanup({ paths }); message.success(`已删除 ${paths.length} 个文件`); load() }
   catch { message.error('删除失败') }
@@ -51,12 +45,12 @@ onMounted(load)
   <PageContainer>
     <PageHeader title="磁盘管理" icon="🧹" />
 
-    <n-grid v-if="data" :cols="4" :x-gap="12" style="margin-bottom: 20px">
-      <n-gi><n-card size="small" :bordered="true" style="text-align: center"><n-statistic label="输出目录" :value="formatSize(data.output.size)" /></n-card></n-gi>
-      <n-gi><n-card size="small" :bordered="true" style="text-align: center"><n-statistic label="缩略图" :value="formatSize(data.thumbnails.size)" /></n-card></n-gi>
-      <n-gi><n-card size="small" :bordered="true" style="text-align: center"><n-statistic label="临时文件" :value="formatSize(data.tmp.size)" /></n-card></n-gi>
-      <n-gi><n-card size="small" :bordered="true" style="text-align: center"><n-statistic label="Bot缓存" :value="formatSize(data.bot_cache.size)" /></n-card></n-gi>
-    </n-grid>
+    <StatsGrid v-if="data" :cols="4" :items="[
+      { label:'输出目录', value: formatSize(data.output.size) },
+      { label:'缩略图', value: formatSize(data.thumbnails.size) },
+      { label:'临时文件', value: formatSize(data.tmp.size) },
+      { label:'Bot缓存', value: formatSize(data.bot_cache.size) },
+    ]" />
 
     <n-empty v-if="!loading && !data" description="无法获取磁盘信息" style="margin-top: 80px" />
 

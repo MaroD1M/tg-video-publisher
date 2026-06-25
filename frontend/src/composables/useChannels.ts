@@ -29,6 +29,7 @@ export function useChannels() {
       })
       channels.value = await channelsPromise
     } catch {
+      channelsPromise = null
       channels.value = []
     }
     loading.value = false
