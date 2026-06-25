@@ -166,7 +166,9 @@ const columns = [
     title: '操作', key: 'actions', width: 100,
     render: (r: Video) => h(NSpace, { size: 'small' }, {
       default: () => [
-        h(NButton, { size: 'tiny', onClick: () => doPublishOne(r.id) }, { default: () => '发布' }),
+        h(NPopconfirm, { onPositiveClick: () => doPublishOne(r.id) },
+          { trigger: () => h(NButton, { size: 'tiny' }, { default: () => '发布' }), default: () => '确定发布此视频？' }
+        ),
         h(NPopconfirm, { onPositiveClick: () => doDeleteOne(r.id) },
           { trigger: () => h(NButton, { size: 'tiny', type: 'error' }, { default: () => '删除' }), default: () => '确定删除？' }
         ),

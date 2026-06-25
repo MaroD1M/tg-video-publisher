@@ -62,7 +62,10 @@ async function doBatchDelete() {
 <template>
   <PageContainer>
     <PageHeader title="缩略图" icon="🖼️">
-      <n-button v-if="selectedCount > 0" size="small" type="error" @click="doBatchDelete">删除已选 ({{ selectedCount }})</n-button>
+      <n-popconfirm @positive-click="doBatchDelete" v-if="selectedCount > 0">
+        <template #trigger><n-button size="small" type="error">删除已选 ({{ selectedCount }})</n-button></template>
+        确定删除选中的 {{ selectedCount }} 个缩略图？
+      </n-popconfirm>
     </PageHeader>
 
     <n-spin :show="loading">

@@ -54,6 +54,7 @@ onMounted(load)
 
     <n-empty v-if="!loading && !data" description="无法获取磁盘信息" style="margin-top: 80px" />
 
+    <n-spin :show="loading">
     <template v-if="data">
     <!-- Orphan outputs -->
     <n-card size="small" title="🗑 未被引用的压缩文件" style="margin-bottom: 16px">
@@ -141,5 +142,6 @@ onMounted(load)
       </n-popconfirm>
     </n-card>
     </template>
+    </n-spin>
   </PageContainer>
 </template>

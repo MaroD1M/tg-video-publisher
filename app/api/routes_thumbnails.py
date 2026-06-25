@@ -18,9 +18,17 @@ async def list_thumbnails(db: AsyncSession = Depends(get_db)):
         select(Thumbnail).order_by(Thumbnail.id.desc()).limit(50)
     )).scalars().all()
 
+    # Batch load videos
+    video_ids = [t.video_id for t in rows]
+    videos = {}
+    if video_ids:
+        from app.database.models import Video
+        vrows = (await db.execute(select(Video).where(Video.id.in_(video_ids)))).scalars().all()
+        videos = {v.id: v for v in vrows}
+
     items = []
     for t in rows:
-        video = await db.get(Video, t.video_id)
+        video = videos.get(t.video_id)
         items.append({
             "id": t.id,
             "video_id": t.video_id,

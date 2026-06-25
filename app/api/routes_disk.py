@@ -130,6 +130,11 @@ async def disk_cleanup_execute(data: dict, db: AsyncSession = Depends(get_db)):
 
     for p in paths:
         try:
+            rp = os.path.realpath(p)
+            allowed = ['/data/output', '/data/thumbnails', '/tmp/compress_workers', '/app/config/bot-api-data']
+            if not any(rp.startswith(d) for d in allowed):
+                errors.append({"path": p, "error": "Access denied"})
+                continue
             if os.path.isfile(p):
                 os.remove(p)
                 deleted.append(p)

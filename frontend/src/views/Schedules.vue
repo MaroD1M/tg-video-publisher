@@ -103,7 +103,9 @@ const columns = [
         h(NButton, { size: 'tiny', onClick: () => openQueue(r) }, { default: () => '队列' }),
         h(NButton, { size: 'tiny', onClick: () => edit(r) }, { default: () => '编辑' }),
         h(NButton, { size: 'tiny', onClick: () => doToggle(r) }, { default: () => r.enabled ? '停用' : '启用' }),
-        h(NButton, { size: 'tiny', onClick: () => doTrigger(r.id) }, { default: () => '执行' }),
+        h(NPopconfirm, { onPositiveClick: () => doTrigger(r.id) },
+          { trigger: () => h(NButton, { size: 'tiny', type: 'primary' }, { default: () => '执行' }), default: () => '确定立即执行此计划？队列中的视频将被发布。' }
+        ),
         h(NPopconfirm, { onPositiveClick: () => doDelete(r.id) },
           { trigger: () => h(NButton, { size: 'tiny', type: 'error' }, { default: () => '删除' }), default: () => '确定删除？' }
         ),

@@ -97,6 +97,7 @@ function toggleExpand(jobId: number) {
 }
 
 const jobs = ref<CompressJobData[]>([])
+const loadingJobs = ref(false)
 
 const { connect: connectWS } = useWebSocket(
   '/ws/compress',
@@ -150,7 +151,7 @@ const stats = computed(() => {
 const activeJobs = computed(() => jobs.value.filter(j => j.status === 'running' || j.status === 'queued' || j.status === 'paused'))
 const completedJobs = computed(() => jobs.value.filter(j => j.status === 'done' || j.status === 'skipped' || j.status === 'failed' || j.status === 'cancelled'))
 
-async function load() { try { jobs.value = ((await fetchCompressJobs()).items || []) as CompressJobData[] } catch {} }
+async function load() { loadingJobs.value = true; try { jobs.value = ((await fetchCompressJobs()).items || []) as CompressJobData[] } catch {} finally { loadingJobs.value = false } }
 
 function thumbUrl(id: number | null) { return id ? getThumbnailImage(id) : '' }
 function formatEta(sec: number) { if (!sec) return ''; const m = Math.floor(sec/60), s = Math.floor(sec%60); return m > 0 ? `剩余 ${m}m${s}s` : `剩余 ${s}s` }
@@ -203,6 +204,12 @@ function getPendingPreset(vid: number) { if (!pendingConfig.value[vid]) updatePe
 function setPendingPreset(vid: number, val: string) { updatePendingConfig(vid, 'preset', val) }
 function getPendingSize(vid: number) { if (!pendingConfig.value[vid]) updatePendingConfig(vid, 'target_size_mb', 500); return pendingConfig.value[vid]?.target_size_mb || 500 }
 function setPendingSize(vid: number, val: number | null) { updatePendingConfig(vid, 'target_size_mb', val ?? 500) }
+function applyResolution(vid: number) {
+  const res = resCache.value[vid]
+  if (!res || res === '0x0') { updatePendingConfig(vid, 'width', 0); updatePendingConfig(vid, 'height', 0); return }
+  const [w, h] = res.split('x').map(Number)
+  if (w && h) { updatePendingConfig(vid, 'width', w); updatePendingConfig(vid, 'height', h) }
+}
 
 onMounted(async () => {
   try {
@@ -245,8 +252,9 @@ onMounted(async () => {
       { label:'进行中', value: stats.running }, { label:'失败', value: stats.failed }, { label:'已跳过', value: stats.skipped },
     ]" />
 
-    <n-empty v-if="!jobs.length && !pendingVideos.length" description="暂无压缩任务，去视频管理页面选中视频后压缩" style="margin-top: 80px" />
+    <n-empty v-if="!loadingJobs && !jobs.length && !pendingVideos.length" description="暂无压缩任务，去视频管理页面选中视频后压缩" style="margin-top: 80px" />
 
+    <n-spin :show="loadingJobs">
     <!-- Pending batch config -->
     <div v-if="pendingVideos.length" style="margin-bottom: 20px; padding: 16px; background: var(--bg-subtle); border-radius: 8px;">
       <n-text strong style="font-size:14px;display:block;margin-bottom:10px">待配置 ({{ pendingVideos.length }})</n-text>
@@ -255,7 +263,7 @@ onMounted(async () => {
         <n-text depth="3" style="font-size:11px;width:70px;flex-shrink:0">{{ formatSize(v.size_bytes) }}</n-text>
         <n-text v-if="v.width" depth="3" style="font-size:11px;width:90px;flex-shrink:0">{{ v.width }}×{{ v.height }}</n-text>
         <n-select :value="getPendingPreset(v.id)" @update:value="(val: string) => setPendingPreset(v.id, val)" size="tiny" style="width:120px" :options="[{label:'极速 H.264',value:'fast'},{label:'均衡 H.265',value:'balanced'},{label:'高画质 2-pass',value:'high_quality'}]" />
-        <n-select v-model:value="resCache[v.id]" size="tiny" style="width:90px" :options="[{label:'原尺寸',value:'0x0'},{label:'4K',value:'3840x2160'},{label:'1080p',value:'1920x1080'},{label:'720p',value:'1280x720'},{label:'480p',value:'640x480'}]" />
+        <n-select :value="resCache[v.id] || '0x0'" @update:value="(val: string) => { resCache[v.id] = val; applyResolution(v.id) }" size="tiny" style="width:90px" :options="[{label:'原尺寸',value:'0x0'},{label:'4K',value:'3840x2160'},{label:'1080p',value:'1920x1080'},{label:'720p',value:'1280x720'},{label:'480p',value:'640x480'}]" />
         <n-input-number :value="getPendingSize(v.id)" @update:value="(val: number | null) => setPendingSize(v.id, val)" size="tiny" :min="10" :max="10000" style="width:90px" /><n-text depth="3" style="font-size:10px">MB</n-text>
         <n-button size="tiny" type="primary" @click="confirmPending(v.id)">确认</n-button>
         <n-button size="tiny" @click="pendingVideos = pendingVideos.filter(p => p.id !== v.id)">移除</n-button>
@@ -372,5 +380,6 @@ onMounted(async () => {
         </div>
       </n-card>
     </n-space>
+    </n-spin>
   </PageContainer>
 </template>

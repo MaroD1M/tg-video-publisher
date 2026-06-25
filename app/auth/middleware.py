@@ -49,8 +49,8 @@ class JWTAuthMiddleware(BaseHTTPMiddleware):
             if path.startswith(prefix):
                 return await call_next(request)
 
-        # ②b Thumbnail images are public via GET (list + image serving)
-        if path.startswith("/api/thumbnails/") and request.method == "GET":
+        # ②b Thumbnail images are public via GET (image serving only)
+        if path.startswith("/api/thumbnails/") and request.method == "GET" and "/image" in path:
             return await call_next(request)
 
         # ③ Public SPA routes + static assets → allow (data is protected via API)

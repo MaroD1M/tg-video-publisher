@@ -53,32 +53,49 @@ async def list_logs(
     rows = (await db.execute(q)).scalars().all()
 
     items = []
+    # Batch load related entities
+    video_ids = [log.video_id for log in rows if log.video_id]
+    chat_ids = [log.target_chat_id for log in rows if log.target_chat_id]
+
+    videos = {}
+    if video_ids:
+        vrows = (await db.execute(select(Video).where(Video.id.in_(video_ids)))).scalars().all()
+        videos = {v.id: v for v in vrows}
+
+    chats = {}
+    if chat_ids:
+        crows = (await db.execute(select(TargetChat).where(TargetChat.chat_id.in_(chat_ids)))).scalars().all()
+        chats = {c.chat_id: c for c in crows}
+
+    # Batch load latest thumbnails per video
+    thumb_map = {}
+    if video_ids:
+        from sqlalchemy import distinct
+        subq = select(
+            Thumbnail.video_id, func.max(Thumbnail.id).label('max_id')
+        ).where(Thumbnail.video_id.in_(video_ids)).group_by(Thumbnail.video_id).subquery()
+        trows = (await db.execute(
+            select(Thumbnail).join(subq, Thumbnail.id == subq.c.max_id)
+        )).scalars().all()
+        thumb_map = {t.video_id: t.id for t in trows}
+
+    # Batch load latest compress ratios
+    ratio_map = {}
+    if video_ids:
+        csub = select(
+            CompressJob.video_id, func.max(CompressJob.id).label('max_id')
+        ).where(
+            CompressJob.video_id.in_(video_ids), CompressJob.status == JobStatus.done
+        ).group_by(CompressJob.video_id).subquery()
+        crows = (await db.execute(
+            select(CompressJob).join(csub, CompressJob.id == csub.c.max_id)
+        )).scalars().all()
+        ratio_map = {c.video_id: c.compression_ratio for c in crows if c.compression_ratio}
+
     for log in rows:
-        video = await db.get(Video, log.video_id) if log.video_id else None
-        chat_name = str(log.target_chat_id)
-        if log.target_chat_id:
-            tc = await db.get(TargetChat, log.target_chat_id)
-            if tc:
-                chat_name = tc.chat_name or chat_name
-
-        thumb_id = None
-        if log.video_id:
-            thumb_row = (await db.execute(
-                select(Thumbnail.id).where(Thumbnail.video_id == log.video_id)
-                .order_by(Thumbnail.id.desc()).limit(1)
-            )).scalar_one_or_none()
-            if thumb_row:
-                thumb_id = thumb_row
-
-        ratio = None
-        if log.video_id:
-            comp = (await db.execute(
-                select(CompressJob).where(
-                    CompressJob.video_id == log.video_id, CompressJob.status == JobStatus.done
-                ).order_by(CompressJob.id.desc()).limit(1)
-            )).scalar_one_or_none()
-            if comp and comp.compression_ratio:
-                ratio = comp.compression_ratio
+        video = videos.get(log.video_id) if log.video_id else None
+        tc = chats.get(log.target_chat_id) if log.target_chat_id else None
+        chat_name = tc.chat_name if tc else str(log.target_chat_id or '')
 
         items.append({
             "id": log.id,
@@ -92,10 +109,10 @@ async def list_logs(
             "error_msg": log.error_msg,
             "retry_count": log.retry_count,
             "published_at": log.published_at.isoformat() if log.published_at else None,
-            "thumbnail_id": thumb_id,
+            "thumbnail_id": thumb_map.get(log.video_id) if log.video_id else None,
             "size": video.size_bytes if video else None,
             "original_size": video.size_bytes if video else None,
-            "compression_ratio": ratio,
+            "compression_ratio": ratio_map.get(log.video_id) if log.video_id else None,
         })
 
     return {"items": items, "total": total, "page": page, "page_size": page_size}

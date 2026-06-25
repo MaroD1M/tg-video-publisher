@@ -70,6 +70,7 @@ interface PublishTask {
 }
 
 const tasks = ref<PublishTask[]>([])
+const loadingTasks = ref(false)
 const showCompleted = ref(false)
 const expandedTaskId = ref<number | null>(null)
 
@@ -146,7 +147,7 @@ const { connect: connectWS } = useWebSocket(
   }
 )
 
-async function load() { try { tasks.value = ((await fetchPublishTasks({ page_size: 100 })).items || []) as PublishTask[] } catch { message.error('加载发布任务失败') } }
+async function load() { loadingTasks.value = true; try { tasks.value = ((await fetchPublishTasks({ page_size: 100 })).items || []) as PublishTask[] } catch { message.error('加载发布任务失败') } finally { loadingTasks.value = false } }
 async function doCancel(taskId: number) { try { await cancelPublishTask(taskId); message.success('已取消'); load() } catch { message.error('取消失败') } }
 async function doRetry(taskId: number) { try { await retryPublishTask(taskId); message.success('已重新加入队列'); load() } catch { message.error('重试失败') } }
 async function doRegenerateThumb(taskId: number) {
@@ -202,7 +203,9 @@ onUnmounted(() => { if (elapsedTimer) clearInterval(elapsedTimer) })
       { label:'进行中', value: stats.running }, { label:'排队中', value: stats.queued }, { label:'失败', value: stats.failed },
     ]" />
 
-    <n-empty v-if="!tasks.length && !pendingVideos.length" description="暂无发布任务" style="margin-top: 80px" />
+    <n-empty v-if="!loadingTasks && !tasks.length && !pendingVideos.length" description="暂无发布任务" style="margin-top: 80px" />
+
+    <n-spin :show="loadingTasks">
 
     <!-- Pending batch -->
     <div v-if="pendingVideos.length" style="margin-bottom:20px;padding:12px;background:var(--bg-subtle);border-radius:8px">
@@ -302,5 +305,6 @@ onUnmounted(() => { if (elapsedTimer) clearInterval(elapsedTimer) })
         </div>
       </n-card>
     </n-space>
+    </n-spin>
   </PageContainer>
 </template>
