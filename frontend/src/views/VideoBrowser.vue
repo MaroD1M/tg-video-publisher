@@ -4,10 +4,9 @@ import { useRouter } from 'vue-router'
 import {
   NCard, NInput, NButton, NDataTable, NSpace,
   NTag, NText, NEmpty,
-  NBreadcrumb, NBreadcrumbItem, NSpin, NProgress, NIcon,
+  NBreadcrumb, NBreadcrumbItem, NSpin, NProgress,
   NPopconfirm, NPopover, NSelect, useMessage,
 } from 'naive-ui'
-import { ScanOutline } from '@vicons/ionicons5'
 import { fetchVideos, scanDirectory, deleteVideo, publishNow, cancelPublishTask, retryPublishTask } from '@/api/client'
 import { useSettingsStore } from '@/stores/settings'
 import { useTaskStore } from '@/stores/tasks'
@@ -216,30 +215,25 @@ const publishTasks = computed(() => taskStore.publishTasks)
     <PageHeader title="视频工作台" icon="📹" />
 
     <n-card size="small" style="margin-bottom: 12px">
-      <n-space vertical :size="8">
-        <n-space :size="8" align="center" v-if="videoSourceDirs.length > 1">
-          <n-text depth="3" style="font-size: 12px; white-space: nowrap;">视频源：</n-text>
-          <n-select
-            v-model:value="selectedRootDir"
-            :options="videoSourceDirs.map((d: string) => ({ label: d, value: d }))"
-            size="small"
-            style="width: 220px"
-            @update:value="switchRootDir"
-          />
-        </n-space>
-        <n-breadcrumb>
+      <n-space :size="8" align="center" style="flex-wrap:wrap">
+        <n-text depth="3" style="font-size:12px;white-space:nowrap">📁</n-text>
+        <n-select
+          v-if="videoSourceDirs.length > 1"
+          v-model:value="selectedRootDir"
+          :options="videoSourceDirs.map((d: string) => ({ label: d, value: d }))"
+          size="small"
+          style="width: 180px"
+          @update:value="switchRootDir"
+        />
+        <n-text v-else depth="2" style="font-size:12px;white-space:nowrap" :title="selectedRootDir">{{ selectedRootDir }}</n-text>
+        <n-breadcrumb style="flex:1;min-width:0;overflow:hidden">
           <n-breadcrumb-item v-for="(crumb, i) in breadcrumbs" :key="crumb.path" @click="browseDir(crumb.path)">
-            {{ i === 0 ? '📁' : '' }} {{ crumb.name }}
+            {{ crumb.name }}
           </n-breadcrumb-item>
         </n-breadcrumb>
-        <n-space :size="8">
-          <n-input v-model:value="currentPath" size="small" :placeholder="selectedRootDir" style="flex: 1" clearable />
-          <n-button size="small" @click="browseDir()">浏览</n-button>
-          <n-button size="small" :loading="scanning" @click="doScan">
-            <template #icon><n-icon><ScanOutline /></n-icon></template>扫描
-          </n-button>
-          <n-input v-model:value="searchText" size="small" placeholder="搜索文件名..." clearable style="width: 200px" />
-        </n-space>
+        <n-button size="small" :loading="scanning" @click="doScan">🔍 扫描</n-button>
+        <n-input v-model:value="searchText" size="small" placeholder="搜索文件名..." clearable style="width: 180px" />
+        <n-text v-if="videos.length" depth="3" style="font-size:11px;white-space:nowrap">共 {{ videos.length }} 个</n-text>
       </n-space>
     </n-card>
 
@@ -249,7 +243,6 @@ const publishTasks = computed(() => taskStore.publishTasks)
       <n-button :type="filterStatus === 'pending' ? 'primary' : 'default'" size="tiny" round @click="onFilterChange('pending')">待处理</n-button>
       <n-button :type="filterStatus === 'compressed' ? 'primary' : 'default'" size="tiny" round @click="onFilterChange('compressed')">已压缩</n-button>
       <n-button :type="filterStatus === 'failed' ? 'primary' : 'default'" size="tiny" round @click="onFilterChange('failed')">失败</n-button>
-      <n-text depth="3" style="font-size: 11px; margin-left: auto" v-if="videos.length">共 {{ videos.length }} 个</n-text>
     </n-space>
 
     <n-spin :show="loading || scanning">
