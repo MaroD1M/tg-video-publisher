@@ -149,7 +149,7 @@ const stats = computed(() => {
 const activeJobs = computed(() => jobs.value.filter(j => j.status === 'running' || j.status === 'queued' || j.status === 'paused'))
 const completedJobs = computed(() => jobs.value.filter(j => j.status === 'done' || j.status === 'skipped' || j.status === 'failed' || j.status === 'cancelled'))
 
-async function load() { try { jobs.value = ((await fetchCompressJobs()).list || []) as CompressJobData[] } catch {} }
+async function load() { try { jobs.value = ((await fetchCompressJobs()).items || []) as CompressJobData[] } catch {} }
 
 function thumbUrl(id: number | null) { return id ? getThumbnailImage(id) : '' }
 function formatEta(sec: number) { if (!sec) return ''; const m = Math.floor(sec/60), s = Math.floor(sec%60); return m > 0 ? `剩余 ${m}m${s}s` : `剩余 ${s}s` }
