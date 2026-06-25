@@ -167,14 +167,17 @@ async function doDeleteJob(jobId: number) { try { await deleteCompressJob(jobId)
 async function doBatchDelete(status: string) { try { await batchDeleteCompress(status); message.success('已删除'); load() } catch { message.error('删除失败') } }
 
 const retryConfig = ref<Record<number, { preset: string; target_size_mb: number }>>({})
+function getDefaultSizeMB(job: CompressJobData) {
+  return Math.max(10, Math.min(Math.ceil((job.original_size_bytes || 500_000_000) / 1_000_000), 2000))
+}
 function initRetryConfig(job: CompressJobData) {
   if (!retryConfig.value[job.id]) {
-    retryConfig.value[job.id] = { preset: job.preset || compressPreset, target_size_mb: 500 }
+    retryConfig.value[job.id] = { preset: job.preset || compressPreset, target_size_mb: getDefaultSizeMB(job) }
   }
 }
 async function doRetryWithConfig(job: CompressJobData) {
   if (!retryConfig.value[job.id]) {
-    retryConfig.value[job.id] = { preset: job.preset || compressPreset, target_size_mb: job.target_size_mb || 500 }
+    retryConfig.value[job.id] = { preset: job.preset || compressPreset, target_size_mb: job.target_size_mb || getDefaultSizeMB(job) }
   }
   const cfg = retryConfig.value[job.id]
   if (cfg) { await updateCompressSettings(job.id, cfg); delete retryConfig.value[job.id] }
@@ -348,7 +351,11 @@ onMounted(async () => {
             <div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap">
               <n-button size="tiny" @click.stop="toggleExpand(job.id)">{{ expandedJobId===job.id?'收起':'详情' }}</n-button>
               <n-button v-if="job.status==='done'||job.status==='skipped'||job.status==='failed'||job.status==='cancelled'" size="tiny" @click.stop="doPublish(job.id)">发布</n-button>
-              <n-button v-if="job.status==='failed'||job.status==='skipped'||job.status==='cancelled'" size="tiny" type="primary" @click.stop="doRetryWithConfig(job)">重试</n-button>
+              <template v-if="job.status==='done'||job.status==='failed'||job.status==='skipped'||job.status==='cancelled'">
+                <n-select :value="retryConfig[job.id]?.preset" @update:value="(val: string) => { if (!retryConfig[job.id]) initRetryConfig(job); retryConfig[job.id].preset = val }" size="tiny" style="width:110px" :options="[{label:'极速 H.264',value:'fast'},{label:'均衡 H.265',value:'balanced'},{label:'高画质',value:'high_quality'}]" @click.stop />
+                <n-input-number :value="retryConfig[job.id]?.target_size_mb" @update:value="(val: number | null) => { if (!retryConfig[job.id]) initRetryConfig(job); retryConfig[job.id].target_size_mb = val ?? getDefaultSizeMB(job) }" size="tiny" :min="10" :max="2000" style="width:70px" @click.stop />
+                <n-button size="tiny" type="primary" @click.stop="doRetryWithConfig(job)">重试</n-button>
+              </template>
               <n-button v-if="(job.status==='done'||job.status==='skipped') && !job.thumbnail_id" size="tiny" @click.stop="doGenerateThumb(job.video_id)">🖼 生成缩略图</n-button>
               <n-popconfirm @positive-click="() => doDeleteJob(job.id)"><template #trigger><n-button size="tiny" type="error" @click.stop>删除</n-button></template>确定删除？</n-popconfirm>
             </div>
@@ -360,11 +367,6 @@ onMounted(async () => {
                 </n-text>
               </div>
               <n-text depth="3" style="font-size:11px;white-space:pre-wrap;font-family:monospace;word-break:break-all;max-height:200px;overflow-y:auto;display:block">{{ (job as any).stderr || job.error || '暂无详情' }}</n-text>
-              <n-space v-if="job.status==='failed'||job.status==='skipped'||job.status==='cancelled'" :size="6" style="margin-top:6px" @click.stop>
-                <n-text depth="3" style="font-size:10px">重试参数:</n-text>
-                <n-select :value="retryConfig[job.id]?.preset" @update:value="(val: string) => { if (!retryConfig[job.id]) initRetryConfig(job); retryConfig[job.id].preset = val }" size="tiny" style="width:110px" :options="[{label:'极速 H.264',value:'fast'},{label:'均衡 H.265',value:'balanced'},{label:'高画质',value:'high_quality'}]" @click.stop />
-                <n-input-number :value="retryConfig[job.id]?.target_size_mb" @update:value="(val: number | null) => { if (!retryConfig[job.id]) initRetryConfig(job); retryConfig[job.id].target_size_mb = val ?? 500 }" size="tiny" :min="10" :max="10000" style="width:70px" @click.stop /><n-text depth="3" style="font-size:10px">MB</n-text>
-              </n-space>
             </div>
           </div>
         </div>
