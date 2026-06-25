@@ -264,6 +264,33 @@ async def start_worker():
                         video.status = VideoStatus.failed
                         video.error_msg = "Compression interrupted (container restarted)"
                 await db.commit()
+
+                # Recover queued and paused jobs that were lost from the in-memory queue
+                rows = (await db.execute(
+                    select(CompressJob).where(
+                        CompressJob.status.in_([JobStatus.queued, JobStatus.paused])
+                    )
+                )).scalars().all()
+                for j in rows:
+                    await job_queue.put({"job_id": j.id, "video_id": j.video_id})
+                if rows:
+                    logging.getLogger("tgvp.worker").info(
+                        f"Re-queued {len(rows)} pending compress jobs after restart"
+                    )
+
+                # Clean orphaned output files from failed/interrupted jobs
+                output_dir = await get_setting("output_dir", "/data/output")
+                for j in (await db.execute(
+                    select(CompressJob).where(CompressJob.status == JobStatus.failed)
+                )).scalars().all():
+                    if j.output_path:
+                        p = Path(j.output_path)
+                        if p.exists():
+                            try:
+                                p.unlink()
+                                logging.getLogger("tgvp.worker").info(f"Cleaned orphan: {p}")
+                            except Exception:
+                                pass
         except Exception as e:
             import logging
             logging.getLogger("tgvp.worker").error(f"Failed to reset stuck jobs on startup: {e}")

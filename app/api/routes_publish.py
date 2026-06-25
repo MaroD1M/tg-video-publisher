@@ -474,6 +474,18 @@ async def start_publish_worker():
                         t.status = PublishTaskStatus.failed
                         t.error_log = "Task interrupted (container restarted)"
                     await db.commit()
+
+                    # Recover queued tasks lost from the in-memory queue
+                    rows = (await db.execute(
+                        select(PublishTask).where(PublishTask.status == PublishTaskStatus.queued)
+                    )).scalars().all()
+                    for t in rows:
+                        await publish_queue.put({"task_id": t.id})
+                    if rows:
+                        import logging
+                        logging.getLogger("tgvp.publish").info(
+                            f"Re-queued {len(rows)} pending publish tasks after restart"
+                        )
             except Exception:
                 pass
             worker_task = asyncio.create_task(_publish_worker())
