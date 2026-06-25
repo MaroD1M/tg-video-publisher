@@ -46,7 +46,10 @@ export interface CompressJobData {
   eta_sec: number | null
   speed: number | null
   fps: number | null
+  phase: string | null
   step_log: StepLogEntry[] | null
+  finished_at: string | null
+  is_published: boolean
   created_at: string | null
   schedule_id: number
   publish_after: boolean
@@ -56,6 +59,11 @@ export interface StepLogEntry {
   step: string
   text: string
   elapsed: number
+  result?: string
+  error?: string
+  speed?: number
+  output_gb?: number
+  thumb_id?: number
 }
 
 export interface PublishTaskData {

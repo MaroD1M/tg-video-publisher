@@ -2,7 +2,7 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import {
-  NCard, NProgress, NText, NEmpty, NSpace, NButton, NImage,
+  NCard, NProgress, NTag, NText, NEmpty, NSpace, NButton, NImage,
   NPopconfirm, NDivider, NGrid, NGi, useMessage,
 } from 'naive-ui'
 import {
@@ -12,8 +12,8 @@ import {
 } from '@/api/client'
 import { useWebSocket } from '@/composables/useWebSocket'
 import { useChannels } from '@/composables/useChannels'
-import { formatSize, formatChannelLabel } from '@/utils/format'
-import type { PublishTaskData, Video } from '@/types'
+import { formatChannelLabel } from '@/utils/format'
+import type { Video } from '@/types'
 import PageHeader from '@/components/shared/PageHeader.vue'
 import PageContainer from '@/components/shared/PageContainer.vue'
 import StatusTag from '@/components/shared/StatusTag.vue'
@@ -24,7 +24,7 @@ const message = useMessage()
 const route = useRoute()
 const pendingVideos = ref<Video[]>([])
 const pendingChannelId = ref<number | null>(null)
-const { channels, load: loadChannels } = useChannels()
+const { load: loadChannels } = useChannels()
 const recentToasts = new Map<string, number>()
 
 function dedupedToast(type: 'success'|'error', videoName: string, msg: string) {
@@ -33,9 +33,7 @@ function dedupedToast(type: 'success'|'error', videoName: string, msg: string) {
   if (now - last < 5000) return
   recentToasts.set(videoName, now)
   if (recentToasts.size > 100) {
-    for (const [k, v] of recentToasts) {
-      if (now - v > 10000) recentToasts.delete(k)
-    }
+    for (const [k, v] of recentToasts) { if (now - v > 10000) recentToasts.delete(k) }
   }
   if (type === 'success') message.success(msg)
   else message.error(msg)
@@ -64,7 +62,14 @@ async function batchPublishVids() {
   } catch { message.error('创建失败') }
 }
 
-const tasks = ref<PublishTaskData[]>([])
+interface PublishTask {
+  id: number; video_id: number | null; video_name: string; channel_name: string
+  status: string; progress: number; elapsed_sec: number; eta_sec: number
+  compression_ratio: number | null; error_log: string; thumbnail_id: number | null
+  created_at: string; is_paused: boolean; step_log: { step: string; elapsed: number; result: string; error?: string; speed_kbs?: number }[]
+}
+
+const tasks = ref<PublishTask[]>([])
 const showCompleted = ref(false)
 const expandedTaskId = ref<number | null>(null)
 
@@ -73,8 +78,7 @@ function toggleExpand(id: number) {
 }
 
 const stats = computed(() => {
-  const total = tasks.value.length
-  const done = tasks.value.filter(t => t.status === 'done').length
+  const total = tasks.value.length; const done = tasks.value.filter(t => t.status === 'done').length
   const running = tasks.value.filter(t => t.status === 'running' || t.status === 'uploading').length
   const queued = tasks.value.filter(t => t.status === 'queued').length
   const failed = tasks.value.filter(t => t.status === 'failed').length
@@ -100,52 +104,60 @@ function startElapsedTimer() {
   }, 1000)
 }
 
+function stopElapsedTimer() {
+  const active = tasks.value.some(t => t.status === 'running' || t.status === 'uploading')
+  if (!active && elapsedTimer) { clearInterval(elapsedTimer); elapsedTimer = undefined }
+}
+
 const { connect: connectWS } = useWebSocket(
   '/ws/compress',
   (e) => {
     try {
       const msg = JSON.parse(e.data)
       if (msg.type === 'publish_progress') {
-        let t = tasks.value.find(p => p.id === msg.task_id)
-        if (!t) {
-          const newTask: PublishTaskData = {
-            id: msg.task_id, video_id: msg.video_id, video_name: msg.video_name,
-            channel_name: msg.channel_name || '', status: 'running', progress: msg.progress || 5,
-            elapsed_sec: msg.elapsed_sec || 0, eta_sec: msg.eta_sec || 0,
-            compression_ratio: null, error: null, thumbnail_id: msg.thumbnail_id || null,
-            created_at: null, step_log: [], schedule_id: 0, channel_id: null,
-          }
-          tasks.value.unshift(newTask)
-          startElapsedTimer()
-        } else {
+        const t = tasks.value.find(j => j.id === msg.task_id)
+        if (t) {
+          t.status = msg.step === 'uploading' ? 'uploading' : 'running'
           t.progress = msg.progress || t.progress
           t.elapsed_sec = msg.elapsed_sec || 0
           t.eta_sec = msg.eta_sec || 0
           t.thumbnail_id = msg.thumbnail_id || t.thumbnail_id
-          t.status = msg.step === 'uploading' ? 'uploading' : 'running'
         }
+        startElapsedTimer()
       } else if (msg.type === 'publish_done') {
-        const t = tasks.value.find(p => p.id === msg.task_id)
-        if (t) { t.status = 'done'; t.progress = 100; dedupedToast('success', t.video_name, `✅ 发布完成: ${t.video_name}`) }
+        const t = tasks.value.find(j => j.id === msg.task_id)
+        if (t) { t.status = 'done'; t.progress = 100 }
+        stopElapsedTimer()
+        dedupedToast('success', msg.video_name, `发布成功: ${msg.video_name}`)
+        load()
       } else if (msg.type === 'publish_error') {
-        const t = tasks.value.find(p => p.id === msg.task_id)
-        if (t) { t.status = 'failed'; t.error = msg.error || ''; dedupedToast('error', t.video_name, `❌ 发布失败: ${t.video_name}`) }
+        const t = tasks.value.find(j => j.id === msg.task_id)
+        if (t) { t.status = 'failed'; t.error_log = msg.error || '' }
+        stopElapsedTimer()
+        dedupedToast('error', msg.video_name, `发布失败: ${msg.video_name}`)
+        load()
       } else if (msg.type === 'publish_cancelled') {
-        const t = tasks.value.find(p => p.id === msg.task_id)
+        const t = tasks.value.find(j => j.id === msg.task_id)
         if (t) t.status = 'cancelled'
+        stopElapsedTimer()
+        load()
       }
     } catch {}
   }
 )
 
-async function load() { try { tasks.value = ((await fetchPublishTasks({ page_size: 100 })).items || []) as PublishTaskData[] } catch {} }
-async function doCancel(taskId: number) { try { await cancelPublishTask(taskId); load() } catch { message.error('取消失败') } }
-async function doRetry(taskId: number) { try { await retryPublishTask(taskId); load() } catch { message.error('重试失败') } }
+async function load() { try { tasks.value = ((await fetchPublishTasks({ page_size: 100 })).items || []) as PublishTask[] } catch { message.error('加载发布任务失败') } }
+async function doCancel(taskId: number) { try { await cancelPublishTask(taskId); message.success('已取消'); load() } catch { message.error('取消失败') } }
+async function doRetry(taskId: number) { try { await retryPublishTask(taskId); message.success('已重新加入队列'); load() } catch { message.error('重试失败') } }
+async function doRegenerateThumb(taskId: number) {
+  const t = tasks.value.find(j => j.id === taskId)
+  if (!t || !t.thumbnail_id) { message.warning('没有缩略图'); return }
+  try { await regenerateThumbnail(t.thumbnail_id); message.success('缩略图已重新生成') } catch { message.error('重新生成失败') }
+}
 async function doPause(taskId: number) { try { await pausePublishTask(taskId); load() } catch { message.error('暂停失败') } }
 async function doResume(taskId: number) { try { await resumePublishTask(taskId); load() } catch { message.error('恢复失败') } }
 async function doReorder(taskId: number, dir: 'up' | 'down') { try { await reorderPublishTask(taskId, dir); load() } catch { message.error('排序失败') } }
 async function doDelete(taskId: number) { try { await deletePublishTask(taskId); load() } catch { message.error('删除失败') } }
-async function doThumb(thumbId: number) { try { await regenerateThumbnail(thumbId); message.success('已重新生成') } catch { message.error('重新生成失败') } }
 
 async function doRetryAllFailed() {
   const failed = tasks.value.filter(t => t.status === 'failed')
@@ -153,41 +165,33 @@ async function doRetryAllFailed() {
   message.success(`已重试 ${failed.length} 个失败任务`)
   load()
 }
-
 async function doDeleteAllCompleted() {
-  try { for (const t of completedTasks.value) { if (t.status === 'done') await deletePublishTask(t.id) } }
-  catch {}
+  try { for (const t of completedTasks.value) { if (t.status === 'done') await deletePublishTask(t.id) } } catch {}
   message.success('已删除已完成')
   load()
 }
-
 async function doDeleteAllFailed() {
-  try { for (const t of completedTasks.value) { if (t.status === 'failed') await deletePublishTask(t.id) } }
-  catch {}
+  try { for (const t of completedTasks.value) { if (t.status === 'failed') await deletePublishTask(t.id) } } catch {}
   message.success('已删除失败')
   load()
 }
 
-onMounted(() => {
-  load()
-  connectWS()
-  initPending()
-  loadChannels()
-})
+function thumbUrl(id: number | null) { return id ? getThumbnailImage(id) : '' }
+function formatSize(bytes: number): string { if (!bytes) return '-'; if (bytes < 1e9) return (bytes/1e6).toFixed(1)+' MB'; return (bytes/1e9).toFixed(2)+' GB' }
+function formatElapsed(sec: number): string { if (!sec) return ''; const m = Math.floor(sec/60), s = Math.floor(sec%60); return m>0?`${m}分${s}秒`:`${s}秒` }
+function statusColor(s: string): string { return { running:'var(--color-purple)',uploading:'var(--color-purple)',done:'var(--color-green)',failed:'var(--color-red)',cancelled:'#aaa',queued:'#5e9eff' }[s]||'#888' }
+function statusLabel(s: string): string { return { running:'处理中',uploading:'上传中',done:'已完成',failed:'失败',cancelled:'已取消',queued:'排队中' }[s]||s }
 
-onUnmounted(() => {
-  if (elapsedTimer) clearInterval(elapsedTimer)
-})
+onMounted(() => { load(); connectWS(); initPending(); loadChannels() })
+onUnmounted(() => { if (elapsedTimer) clearInterval(elapsedTimer) })
 </script>
 
 <template>
   <PageContainer>
     <PageHeader title="发布任务" icon="📤">
       <template v-if="completedTasks.length">
-        <n-space :size="8">
-          <n-button size="small" @click="showCompleted = !showCompleted">
-            {{ showCompleted ? '收起历史' : '展开历史' }} ({{ completedTasks.length }})
-          </n-button>
+        <n-space :size="6" style="margin-bottom: 8px">
+          <n-button size="small" @click="showCompleted = !showCompleted">{{ showCompleted ? '收起历史' : `展开历史 (${completedTasks.length})` }}</n-button>
           <n-popconfirm @positive-click="doRetryAllFailed"><template #trigger><n-button size="small" type="primary">重试全部失败</n-button></template>确定重试所有失败任务？</n-popconfirm>
           <n-popconfirm @positive-click="doDeleteAllCompleted"><template #trigger><n-button size="small" type="warning">清空已完成</n-button></template>确定删除所有已完成任务？</n-popconfirm>
           <n-popconfirm @positive-click="doDeleteAllFailed"><template #trigger><n-button size="small" type="error">清空失败</n-button></template>确定删除所有失败任务？</n-popconfirm>
@@ -195,74 +199,110 @@ onUnmounted(() => {
       </template>
     </PageHeader>
 
-    <!-- Pending batch -->
-    <n-card v-if="pendingVideos.length" size="small" title="📋 待发布的视频" style="margin-bottom: 16px">
-      <n-text depth="3" style="font-size:12px;display:block;margin-bottom:8px">从视频管理页面导航</n-text>
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
-        <n-text style="font-size:12px;white-space:nowrap">发布到：</n-text>
-        <ChannelSelect v-model="pendingChannelId" size="small" width="200px" />
-        <n-button type="primary" size="small" @click="batchPublishVids" :disabled="!pendingVideos.length">全部发布 ({{ pendingVideos.length }})</n-button>
-      </div>
-      <div v-for="v in pendingVideos" :key="v.id" style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--border-subtle);font-size:12px">
-        <n-text style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ v.filename }}</n-text>
-      </div>
-    </n-card>
-
     <StatsGrid v-if="tasks.length" :cols="5" :items="[
-      { label:'总任务', value: stats.total },
-      { label:'已完成', value: stats.done },
-      { label:'进行中', value: stats.running },
-      { label:'排队中', value: stats.queued },
-      { label:'失败', value: stats.failed },
+      { label:'总任务', value: stats.total }, { label:'已完成', value: stats.done },
+      { label:'进行中', value: stats.running }, { label:'排队中', value: stats.queued }, { label:'失败', value: stats.failed },
     ]" />
 
     <n-empty v-if="!tasks.length && !pendingVideos.length" description="暂无发布任务" style="margin-top: 80px" />
 
+    <!-- Pending batch -->
+    <div v-if="pendingVideos.length" style="margin-bottom:20px;padding:12px;background:var(--bg-subtle);border-radius:8px">
+      <n-text strong style="font-size:13px;display:block;margin-bottom:8px">待发布 ({{ pendingVideos.length }})</n-text>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
+        <n-text v-for="v in pendingVideos" :key="v.id" depth="3" style="font-size:12px">🎬 {{ v.filename }}</n-text>
+      </div>
+      <n-space :size="8">
+        <ChannelSelect v-model="pendingChannelId" size="small" width="200px" />
+        <n-button size="small" type="primary" @click="batchPublishVids">全部发布</n-button>
+      </n-space>
+    </div>
+
     <!-- Active tasks -->
-    <div v-if="activeTasks.length">
-      <n-grid :cols="2" :x-gap="12" :y-gap="12" responsive="screen" item-responsive>
-        <n-gi v-for="task in activeTasks" :key="task.id">
-          <n-card size="small" :bordered="true" style="height:100%">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-              <div v-if="task.thumbnail_id" class="thumb-blur" style="width:40px;height:23px;overflow:hidden;border-radius:3px;flex-shrink:0">
-                <n-image :src="getThumbnailImage(task.thumbnail_id)" width="100%" :preview-disabled="false" object-fit="cover" />
+    <n-space vertical :size="12" v-if="activeTasks.length">
+      <n-text depth="3" style="font-size:12px">进行中 · 排队中 ({{ activeTasks.length }})</n-text>
+      <n-card v-for="task in activeTasks" :key="task.id" size="small" :bordered="true"
+        :style="{ borderLeft: `3px solid ${statusColor(task.status)}`, cursor: 'pointer' }"
+        @click="toggleExpand(task.id)">
+        <div style="display:flex;gap:14px">
+          <div v-if="task.thumbnail_id" class="thumb-blur" style="flex-shrink:0;width:120px;height:68px;border-radius:6px;overflow:hidden;background:rgba(0,0,0,0.3)">
+            <n-image :src="thumbUrl(task.thumbnail_id)" :width="120" :height="68" object-fit="cover" :show-toolbar="false" />
+          </div>
+          <div v-else style="flex-shrink:0;width:120px;height:68px;border-radius:6px;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.3)"><span style="font-size:24px;opacity:0.3">📤</span></div>
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+              <div style="min-width:0">
+                <n-text strong style="font-size:14px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ task.video_name }}</n-text>
+                <n-text v-if="task.channel_name" depth="3" style="font-size:11px">→ {{ task.channel_name }}</n-text>
               </div>
-              <div v-else style="width:40px;height:23px;border-radius:3px;background:var(--border-subtle);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px">🎬</div>
-              <n-text style="flex:1;font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ task.video_name }}</n-text>
               <StatusTag :status="task.status" />
             </div>
-            <n-progress type="line" :percentage="task.progress || 0" :height="10" :color="task.status==='failed'?'var(--color-red)':'var(--color-purple)'" :indicator-placement="'inside'" :processing="task.status==='running'||task.status==='uploading'" style="margin-bottom:6px" />
-            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-              <n-text depth="3" style="font-size:11px">{{ task.channel_name }}</n-text>
-              <n-text v-if="task.status==='running'||task.status==='uploading'" depth="3" style="font-size:11px">
-                {{ task.elapsed_sec ? Math.floor((task.elapsed_sec||0)/60)+'m'+Math.floor((task.elapsed_sec||0)%60)+'s' : '' }}
-                <template v-if="task.eta_sec"> · 剩余 {{ Math.floor((task.eta_sec||0)/60) }}m</template>
-              </n-text>
-              <div style="margin-left:auto;display:flex;gap:4px">
-                <n-popconfirm @positive-click="() => doCancel(task.id)"><template #trigger><n-button size="tiny" type="error">取消</n-button></template>确定取消？</n-popconfirm>
-                <n-popconfirm @positive-click="() => doDelete(task.id)"><template #trigger><n-button size="tiny" type="error">删除</n-button></template>确定删除？</n-popconfirm>
-              </div>
+            <n-progress type="line" :percentage="task.progress||0" :height="16" :border-radius="8" :color="statusColor(task.status)" :indicator-placement="'inside'" :processing="task.status==='running'||task.status==='uploading'" />
+            <div style="margin-top:8px;display:flex;align-items:center;gap:10px;font-size:12px;flex-wrap:wrap">
+              <n-text depth="3">⏱ {{ formatElapsed(task.elapsed_sec) }}<template v-if="task.eta_sec"> · 剩余 {{ formatElapsed(task.eta_sec) }}</template></n-text>
+              <n-space :size="6" style="margin-left:auto">
+                <n-button v-if="task.status==='queued' && !task.is_paused" size="tiny" @click.stop="doPause(task.id)">暂停</n-button>
+                <n-button v-if="task.status==='queued' && task.is_paused" size="tiny" type="primary" @click.stop="doResume(task.id)">恢复</n-button>
+                <n-button v-if="task.status==='queued'" size="tiny" @click.stop="doReorder(task.id, 'up')">↑</n-button>
+                <n-button v-if="task.status==='queued'" size="tiny" @click.stop="doReorder(task.id, 'down')">↓</n-button>
+                <n-popconfirm @positive-click="() => doCancel(task.id)"><template #trigger><n-button size="tiny">取消</n-button></template>确定取消此任务？</n-popconfirm>
+              </n-space>
             </div>
-          </n-card>
-        </n-gi>
-      </n-grid>
+            <div v-if="expandedTaskId===task.id" style="margin-top:8px;padding-top:6px;border-top:1px solid var(--border-subtle)">
+              <n-text v-if="task.error_log" depth="3" style="font-size:11px;white-space:pre-wrap;font-family:monospace;word-break:break-all;display:block">{{ task.error_log }}</n-text>
+              <n-text v-else depth="3">暂无详情</n-text>
+            </div>
+          </div>
+        </div>
+      </n-card>
+    </n-space>
+
+    <!-- Completed toggle -->
+    <div v-if="!showCompleted && completedTasks.length" style="margin-top:20px">
+      <n-button size="tiny" @click="showCompleted = true">展开历史 ({{ completedTasks.length }})</n-button>
     </div>
 
     <!-- Completed tasks -->
-    <template v-if="showCompleted && completedTasks.length">
-      <n-divider style="margin: 16px 0" />
-      <n-text depth="2" style="font-weight:600;margin-bottom:12px;display:block">已完成 ({{ completedTasks.length }})</n-text>
-      <div v-for="(task, i) in completedTasks" :key="task.id || i" style="display:flex;align-items:center;gap:12px;padding:6px 0;border-bottom:1px solid var(--border-subtle);font-size:13px;opacity:0.75">
-        <div v-if="task.thumbnail_id" class="thumb-blur" style="width:40px;height:23px;overflow:hidden;border-radius:3px;flex-shrink:0">
-          <n-image :src="getThumbnailImage(task.thumbnail_id)" width="100%" :preview-disabled="false" object-fit="cover" />
+    <n-space v-if="showCompleted && completedTasks.length" vertical :size="12" style="margin-top:12px">
+      <n-card v-for="task in completedTasks" :key="task.id" size="small" :bordered="true"
+        :style="{ borderLeft: `3px solid ${statusColor(task.status)}`, opacity: 0.7, cursor: 'pointer' }"
+        @click="toggleExpand(task.id)">
+        <div style="display:flex;gap:14px">
+          <div v-if="task.thumbnail_id" class="thumb-blur" style="flex-shrink:0;width:80px;height:45px;border-radius:4px;overflow:hidden;background:rgba(0,0,0,0.3)">
+            <n-image :src="thumbUrl(task.thumbnail_id)" :width="80" :height="45" object-fit="cover" :show-toolbar="false" />
+          </div>
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start">
+              <div style="min-width:0">
+                <n-text strong style="font-size:13px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ task.video_name }}</n-text>
+                <n-text v-if="task.channel_name" depth="3" style="font-size:11px">→ {{ task.channel_name }}</n-text>
+              </div>
+              <StatusTag :status="task.status" />
+            </div>
+            <div style="font-size:12px">
+              <n-text v-if="task.status==='done'">⏱ {{ formatElapsed(task.elapsed_sec) }}</n-text>
+              <n-text v-else-if="task.status==='failed' && task.error_log" depth="3" style="color:var(--color-red);font-size:11px;display:block">{{ task.error_log.slice(0,100) }}</n-text>
+            </div>
+            <div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap">
+              <n-button size="tiny" @click.stop="toggleExpand(task.id)">{{ expandedTaskId===task.id?'收起':'详情' }}</n-button>
+              <n-button v-if="task.status==='failed'||task.status==='cancelled'" size="tiny" type="primary" @click.stop="doRetry(task.id)">重新发布</n-button>
+              <n-button v-if="task.status==='done'" size="tiny" @click.stop="doRetry(task.id)">重新发布</n-button>
+              <n-button v-if="task.thumbnail_id" size="tiny" @click.stop="doRegenerateThumb(task.id)">重生成缩略图</n-button>
+              <span @click.stop><n-popconfirm @positive-click="() => doDelete(task.id)"><template #trigger><n-button size="tiny" type="error">删除</n-button></template>确定删除此记录？</n-popconfirm></span>
+            </div>
+            <div v-if="expandedTaskId===task.id" style="margin-top:6px;padding-top:6px;border-top:1px solid var(--border-subtle)">
+              <div v-if="task.step_log && task.step_log.length" style="margin-bottom:6px">
+                <n-text depth="3" style="font-size:11px;display:block;margin-bottom:2px">步骤日志：</n-text>
+                <n-text v-for="(s,i) in task.step_log" :key="i" depth="3" style="font-size:11px;display:block">
+                  {{ i+1 }}. {{ s.step }} — {{ s.elapsed }}s {{ s.result }}{{ s.speed_kbs ? ' · '+s.speed_kbs+'KB/s' : '' }}{{ s.error ? ': '+s.error.slice(0,60) : '' }}
+                </n-text>
+              </div>
+              <n-text v-if="task.error_log" depth="3" style="font-size:11px;white-space:pre-wrap;font-family:monospace;word-break:break-all;max-height:200px;overflow-y:auto;display:block">{{ task.error_log }}</n-text>
+              <n-text v-else depth="3">暂无详情</n-text>
+            </div>
+          </div>
         </div>
-        <div v-else style="width:40px;height:23px;border-radius:3px;background:var(--border-subtle);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px">🎬</div>
-        <n-text style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ task.video_name }}</n-text>
-        <StatusTag :status="task.status" />
-        <n-text v-if="task.error" depth="3" style="font-size:11px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ task.error.slice(0, 40) }}</n-text>
-        <n-popconfirm @positive-click="() => doRetry(task.id)"><template #trigger><n-button size="tiny" type="primary">重试</n-button></template>确定重试？</n-popconfirm>
-        <n-popconfirm @positive-click="() => doDelete(task.id)"><template #trigger><n-button size="tiny" type="error">删除</n-button></template>确定删除？</n-popconfirm>
-      </div>
-    </template>
+      </n-card>
+    </n-space>
   </PageContainer>
 </template>
