@@ -20,6 +20,7 @@ import PageHeader from '@/components/shared/PageHeader.vue'
 import PageContainer from '@/components/shared/PageContainer.vue'
 import StatusTag from '@/components/shared/StatusTag.vue'
 import StatsGrid from '@/components/shared/StatsGrid.vue'
+import ChannelSelect from '@/components/shared/ChannelSelect.vue'
 
 const message = useMessage()
 const route = useRoute()
