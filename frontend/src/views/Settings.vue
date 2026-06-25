@@ -181,12 +181,12 @@ onMounted(async () => {
 
 async function saveGeneral() {
   try {
-    const body: Record<string, string> = {}
+    const body: Record<string, any> = {}
     for (const [k, v] of Object.entries(generalForm.value)) {
       if (k === 'video_source_dirs') {
         const dirs = (v as string[]).filter(d => d.trim())
         if (dirs.length === 0) { message.error('至少需要配置一个视频源目录'); return }
-        body[k] = JSON.stringify(dirs)
+        body[k] = dirs
       } else {
         body[k] = String(v)
       }

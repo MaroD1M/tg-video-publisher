@@ -251,7 +251,7 @@ onMounted(async () => {
         <n-text v-if="v.width" depth="3" style="font-size:11px;width:90px;flex-shrink:0">{{ v.width }}×{{ v.height }}</n-text>
         <n-select :value="getPendingPreset(v.id)" @update:value="(val: string) => setPendingPreset(v.id, val)" size="tiny" style="width:120px" :options="[{label:'极速 H.264',value:'fast'},{label:'均衡 H.265',value:'balanced'},{label:'高画质 2-pass',value:'high_quality'}]" />
         <n-select v-model:value="resCache[v.id]" size="tiny" style="width:90px" :options="[{label:'原尺寸',value:'0x0'},{label:'4K',value:'3840x2160'},{label:'1080p',value:'1920x1080'},{label:'720p',value:'1280x720'},{label:'480p',value:'640x480'}]" />
-        <n-input-number :value="getPendingSize(v.id)" @update:value="(val: number | null) => setPendingSize(v.id, val)" size="tiny" :min="10" :max="10000" style="width:70px" /><n-text depth="3" style="font-size:10px">MB</n-text>
+        <n-input-number :value="getPendingSize(v.id)" @update:value="(val: number | null) => setPendingSize(v.id, val)" size="tiny" :min="10" :max="10000" style="width:90px" /><n-text depth="3" style="font-size:10px">MB</n-text>
         <n-button size="tiny" type="primary" @click="confirmPending(v.id)">确认</n-button>
         <n-button size="tiny" @click="pendingVideos = pendingVideos.filter(p => p.id !== v.id)">移除</n-button>
       </div>
