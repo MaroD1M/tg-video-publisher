@@ -139,6 +139,22 @@ async def do_scan(path: str = Query(...), db: AsyncSession = Depends(get_db)):
     }
 
 
+@router.post("/videos/cleanup-missing")
+async def cleanup_missing(path: str = Query(None), db: AsyncSession = Depends(get_db)):
+    """Remove DB records for video files that no longer exist on disk."""
+    q = select(Video)
+    if path:
+        q = q.where(Video.filepath.ilike(f"{path}%"))
+    rows = (await db.execute(q)).scalars().all()
+    removed = 0
+    for v in rows:
+        if not os.path.exists(v.filepath):
+            await db.delete(v)
+            removed += 1
+    await db.commit()
+    return {"ok": True, "removed": removed, "message": f"已清理 {removed} 条不存在的记录"}
+
+
 # ── Fixed-path routes (MUST come before /videos/{video_id} to avoid 422) ──
 
 

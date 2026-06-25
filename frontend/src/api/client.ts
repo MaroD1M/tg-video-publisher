@@ -92,6 +92,11 @@ export async function scanDirectory(path: string) {
   return data
 }
 
+export async function cleanupMissingVideos(path: string) {
+  const { data } = await api.post('/videos/cleanup-missing', null, { params: { path } })
+  return data
+}
+
 export async function submitCompress(videoIds: number[], preset: string = 'balanced', targetSizeMb: number = 1000, targetWidth: number = 0, targetHeight: number = 0, scheduleId: number = 0, publishAfter: boolean = false, publishChannelId: number = 0) {
   const { data } = await api.post('/compress', { video_ids: videoIds, preset, target_size_mb: targetSizeMb, target_width: targetWidth, target_height: targetHeight, schedule_id: scheduleId, publish_after: publishAfter, publish_channel_id: publishChannelId })
   return data

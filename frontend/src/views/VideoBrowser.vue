@@ -7,7 +7,7 @@ import {
   NBreadcrumb, NBreadcrumbItem, NSpin, NProgress,
   NPopconfirm, NPopover, NSelect, useMessage,
 } from 'naive-ui'
-import { fetchVideos, scanDirectory, deleteVideo, publishNow, cancelPublishTask } from '@/api/client'
+import { fetchVideos, scanDirectory, deleteVideo, publishNow, cancelPublishTask, cleanupMissingVideos } from '@/api/client'
 import { useSettingsStore } from '@/stores/settings'
 import { useTaskStore } from '@/stores/tasks'
 import { useWebSocket } from '@/composables/useWebSocket'
@@ -123,6 +123,16 @@ async function doScan() {
   scanning.value = false
 }
 
+async function cleanupMissing() {
+  scanning.value = true
+  try {
+    const data = await cleanupMissingVideos(currentPath.value)
+    message.success(data.message || `已清理 ${data.removed} 条`)
+    await loadVideos()
+  } catch { message.error('清理失败') }
+  scanning.value = false
+}
+
 function onFilterChange(val: string) {
   filterStatus.value = val
   loadVideos()
@@ -229,6 +239,10 @@ const publishTasks = computed(() => taskStore.publishTasks)
           </n-breadcrumb-item>
         </n-breadcrumb>
         <n-button size="small" :loading="scanning" @click="doScan">🔍 扫描</n-button>
+        <n-popconfirm @positive-click="cleanupMissing">
+          <template #trigger><n-button size="small">🧹 清理缺失</n-button></template>
+          扫描当前目录中已不存在的视频记录并删除？
+        </n-popconfirm>
         <n-input v-model:value="searchText" size="small" placeholder="搜索文件名..." clearable style="width: 180px" />
         <n-text v-if="videos.length" depth="3" style="font-size:11px;white-space:nowrap">共 {{ videos.length }} 个</n-text>
       </n-space>
