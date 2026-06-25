@@ -231,7 +231,6 @@ onMounted(async () => {
     <PageHeader title="压缩任务" icon="⚡">
       <template v-if="completedJobs.length">
         <n-space :size="8">
-          <ChannelSelect v-model="publishChannel" size="small" width="160px" placeholder="发布到：" />
           <n-button size="small" @click="showCompleted = !showCompleted">
             {{ showCompleted ? '收起历史' : `展开历史 (${completedJobs.length})` }}
           </n-button>
@@ -251,6 +250,11 @@ onMounted(async () => {
       { label:'总任务', value: stats.total }, { label:'已完成', value: stats.done },
       { label:'进行中', value: stats.running }, { label:'失败', value: stats.failed }, { label:'已跳过', value: stats.skipped },
     ]" />
+
+    <n-space v-if="completedJobs.length" :size="8" style="margin-bottom:12px" align="center">
+      <n-text depth="3" style="font-size:12px;white-space:nowrap">发布到：</n-text>
+      <ChannelSelect v-model="publishChannel" size="small" width="160px" placeholder="选择频道" />
+    </n-space>
 
     <n-empty v-if="!loadingJobs && !jobs.length && !pendingVideos.length" description="暂无压缩任务，去视频管理页面选中视频后压缩" style="margin-top: 80px" />
 
@@ -360,8 +364,8 @@ onMounted(async () => {
               <n-button size="tiny" @click.stop="toggleExpand(job.id)">{{ expandedJobId===job.id?'收起':'详情' }}</n-button>
               <n-button v-if="job.status==='done'||job.status==='skipped'||job.status==='failed'||job.status==='cancelled'" size="tiny" @click.stop="doPublish(job.id)">发布</n-button>
               <template v-if="job.status==='done'||job.status==='failed'||job.status==='skipped'||job.status==='cancelled'">
-                <n-select :value="retryConfig[job.id]?.preset" @update:value="(val: string) => { if (!retryConfig[job.id]) initRetryConfig(job); retryConfig[job.id].preset = val }" size="tiny" style="width:110px" :options="[{label:'极速 H.264',value:'fast'},{label:'均衡 H.265',value:'balanced'},{label:'高画质',value:'high_quality'}]" @click.stop />
-                <n-input-number :value="retryConfig[job.id]?.target_size_mb" @update:value="(val: number | null) => { if (!retryConfig[job.id]) initRetryConfig(job); retryConfig[job.id].target_size_mb = val ?? getDefaultSizeMB(job) }" size="tiny" :min="10" :max="2000" style="width:70px" @click.stop />
+                <n-select :value="retryConfig[job.id]?.preset" @update:value="(val: string) => { if (!retryConfig[job.id]) initRetryConfig(job); retryConfig[job.id].preset = val }" size="tiny" style="width:130px" :options="[{label:'极速 H.264',value:'fast'},{label:'均衡 H.265',value:'balanced'},{label:'高画质',value:'high_quality'}]" @click.stop />
+                <n-input-number :value="retryConfig[job.id]?.target_size_mb" @update:value="(val: number | null) => { if (!retryConfig[job.id]) initRetryConfig(job); retryConfig[job.id].target_size_mb = val ?? getDefaultSizeMB(job) }" size="tiny" :min="10" :max="2000" style="width:80px" @click.stop />
                 <n-button size="tiny" type="primary" @click.stop="doRetryWithConfig(job)">重试</n-button>
               </template>
               <n-button v-if="(job.status==='done'||job.status==='skipped') && !job.thumbnail_id" size="tiny" @click.stop="doGenerateThumb(job.video_id)">🖼 生成缩略图</n-button>
