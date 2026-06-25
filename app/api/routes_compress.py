@@ -134,6 +134,13 @@ async def _execute_one(job_data: dict):
 
         # Phase 2: Run compression
         compress_start = time.time()
+        step_logs.append({"step":"encoding","elapsed":0,"result":"running"})
+        await broadcast({
+            "type": "progress", "job_id": job_id,
+            "percent": 0, "eta_sec": 0, "elapsed_sec": 0, "speed": 0, "fps": 0,
+            "phase": "encoding", "step_log": step_logs,
+            "thumbnail_id": thumb_id_val,
+        })
         result = await run_compress_job(
             job_id=job_id, video_id=video_id,
             input_path=input_path, output_filename=output_filename,

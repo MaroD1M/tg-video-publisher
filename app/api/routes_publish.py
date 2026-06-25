@@ -16,6 +16,7 @@ router = APIRouter()
 publish_queue: asyncio.Queue = asyncio.Queue()
 worker_task: Optional[asyncio.Task] = None
 _worker_lock = asyncio.Lock()
+_recent_upload_speeds: list[float] = []  # bytes/sec from last 3 uploads
 
 
 async def broadcast_publish(msg: dict):
@@ -145,7 +146,8 @@ async def _execute_publish(task_id: int):
                     video_tpl = sched.video_caption_template or ""
 
         elapsed = time.time() - thumb_start
-        est_upload_sec = round(vsize / (2 * 1024 * 1024)) if vsize > 0 else 30
+        avg_speed = sum(_recent_upload_speeds) / len(_recent_upload_speeds) if _recent_upload_speeds else 2 * 1024 * 1024
+        est_upload_sec = round(vsize / avg_speed) if vsize > 0 and avg_speed > 0 else 30
         step_logs.append({"step":"prepare","elapsed":round(elapsed,1),"result":"done"})
         await broadcast_publish({
             "type": "publish_progress", "task_id": task_id, "video_id": task.video_id,
@@ -177,6 +179,10 @@ async def _execute_publish(task_id: int):
         if result.get("success"):
             upload_elapsed = time.time() - thumb_start
             upload_speed = round(vsize / upload_elapsed / 1024) if upload_elapsed > 0 and vsize > 0 else 0
+            if upload_speed > 0:
+                _recent_upload_speeds.append(vsize / upload_elapsed)
+                if len(_recent_upload_speeds) > 3:
+                    _recent_upload_speeds.pop(0)
             step_logs.append({"step":"send","elapsed":round(upload_elapsed,1),"result":"done","speed_kbs":upload_speed})
             async with async_session() as db:
                 task = await db.get(PublishTask, task_id)
