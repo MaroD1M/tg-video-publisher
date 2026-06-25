@@ -20,12 +20,17 @@ async def list_videos(
     path: str = Query(""),
     parent: str = Query(""),
     status: Optional[str] = Query(None),
+    ids: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
 ):
     q = select(Video)
-    if path:
+    if ids:
+        id_list = [int(x) for x in ids.split(",") if x.strip().isdigit()]
+        if id_list:
+            q = q.where(Video.id.in_(id_list))
+    elif path:
         q = q.where(Video.filepath.ilike(f"{path}%"))
     elif parent:
         q = q.where(Video.filepath.ilike(f"{parent}/%"))

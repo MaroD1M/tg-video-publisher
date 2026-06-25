@@ -23,7 +23,7 @@ async function initPending() {
   const ids = route.query.ids as string
   if (!ids) return
   try {
-    const data = await fetchVideos({ page_size: 100 })
+    const data = await fetchVideos({ ids })
     const idSet = new Set(ids.split(',').map(Number))
     pendingVideos.value = (data.items || []).filter((v: any) => idSet.has(v.id))
   } catch {}

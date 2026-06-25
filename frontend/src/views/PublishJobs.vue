@@ -45,7 +45,7 @@ async function initPending() {
   const cid = route.query.channel_id as string
   if (cid) pendingChannelId.value = Number(cid)
   try {
-    const data = await fetchVideos({ page_size: 100 })
+    const data = await fetchVideos({ ids })
     const idSet = new Set(ids.split(',').map(Number))
     pendingVideos.value = (data.items || []).filter((v: any) => idSet.has(v.id))
   } catch {}
