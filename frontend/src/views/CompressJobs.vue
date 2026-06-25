@@ -26,6 +26,7 @@ const route = useRoute()
 const router = useRouter()
 const showCompleted = ref(false)
 const expandedJobId = ref<number | null>(null)
+const publishChannel = ref<number | null>(null)
 const settingsStore = useSettingsStore()
 const { channels, load: loadChannels } = useChannels()
 
@@ -106,7 +107,7 @@ const { connect: connectWS } = useWebSocket(
         if (!jobs.value.find(j => j.id === msg.job_id)) {
           jobs.value.unshift({
             id: msg.job_id, video_id: 0, video_name: msg.video, preset: msg.preset || 'balanced',
-            status: 'running', progress: 0, output_size: 0, original_size: msg.original_size || 0,
+            status: 'running', progress: 0, output_size_bytes: 0, original_size_bytes: msg.original_size || 0,
             eta_sec: msg.eta_sec || 0, elapsed_sec: 0, speed: 0, fps: 0, error: '',
             thumbnail_id: msg.thumbnail_id || null, step_log: [], output_path: null,
             target_size_mb: 0, target_width: 0, target_height: 0, thumbnail_layout: '3x3',
@@ -126,7 +127,7 @@ const { connect: connectWS } = useWebSocket(
         }
       } else if (msg.type === 'job_done') {
         const job = jobs.value.find(j => j.id === msg.job_id)
-        if (job) { job.status = 'done'; job.progress = 100; job.output_size = msg.output_size }
+        if (job) { job.status = 'done'; job.progress = 100; job.output_size_bytes = msg.output_size }
       } else if (msg.type === 'job_skip') {
         const job = jobs.value.find(j => j.id === msg.job_id)
         if (job) { job.status = 'skipped'; job.progress = 100; job.thumbnail_id = msg.thumbnail_id || null }
@@ -186,11 +187,11 @@ async function doGenerateThumb(videoId: number) {
 }
 
 async function doPublish(jobId: number) {
-  if (!channels.value.length) { message.warning('未发现频道'); return }
+  if (!publishChannel.value) { message.warning('请先选择发布频道'); return }
   const job = jobs.value.find(j => j.id === jobId)
   if (!job?.video_id) { message.warning('无关联视频'); return }
   try {
-    await publishNow(job.video_id, channels.value[0].chat_id)
+    await publishNow(job.video_id, publishChannel.value)
     message.success(`发布任务已提交: ${job.video_name}`)
   } catch { message.error('发布失败') }
 }
@@ -220,6 +221,7 @@ onMounted(async () => {
     <PageHeader title="压缩任务" icon="⚡">
       <template v-if="completedJobs.length">
         <n-space :size="8">
+          <ChannelSelect v-model="publishChannel" size="small" width="160px" placeholder="发布到：" />
           <n-button size="small" @click="showCompleted = !showCompleted">
             {{ showCompleted ? '收起历史' : `展开历史 (${completedJobs.length})` }}
           </n-button>
@@ -339,7 +341,7 @@ onMounted(async () => {
             </div>
             <div style="font-size:12px">
               <n-text v-if="(job as any).finished_at" depth="3" style="font-size:10px;display:block;margin-bottom:2px">完成的于 {{ new Date((job as any).finished_at).toLocaleTimeString('zh-CN', {hour:'2-digit',minute:'2-digit'}) }}</n-text>
-              <n-text v-if="job.status==='done'" style="color:var(--color-green)">{{ formatSize(job.original_size||0) }} → {{ formatSize(job.output_size||0) }}</n-text>
+              <n-text v-if="job.status==='done'" style="color:var(--color-green)">{{ formatSize(job.original_size_bytes||0) }} → {{ formatSize(job.output_size_bytes||0) }}</n-text>
               <n-text v-else-if="job.status==='skipped'" style="color:#5e9eff">{{ (job as any).skip_reason || '已跳过' }}</n-text>
               <n-text v-else-if="job.status==='failed' && job.error" depth="3" style="display:block;margin-top:4px;font-size:11px;font-family:monospace;word-break:break-all;max-height:60px;overflow:hidden;text-overflow:ellipsis">{{ job.error.slice(0,200) }}</n-text>
             </div>

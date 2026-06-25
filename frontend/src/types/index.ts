@@ -38,8 +38,8 @@ export interface CompressJobData {
   thumbnail_layout: string
   thumbnail_id: number | null
   output_path: string | null
-  output_size: number | null
-  original_size: number | null
+  output_size_bytes: number | null
+  original_size_bytes: number | null
   compression_ratio: number | null
   error: string | null
   elapsed_sec: number | null
