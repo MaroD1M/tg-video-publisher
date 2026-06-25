@@ -61,7 +61,16 @@ async def _broadcast_fn(msg: str):
 async def _compression_worker():
     while True:
         try:
-            job_data = await job_queue.get()
+            try:
+                job_data = await asyncio.wait_for(job_queue.get(), timeout=30)
+            except asyncio.TimeoutError:
+                async with async_session() as db:
+                    stuck = (await db.execute(
+                        select(CompressJob).where(CompressJob.status == JobStatus.queued)
+                    )).scalars().all()
+                    for j in stuck:
+                        await job_queue.put({"job_id": j.id, "video_id": j.video_id})
+                continue
             await _execute_one(job_data)
         except asyncio.CancelledError:
             break

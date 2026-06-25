@@ -31,15 +31,22 @@ async def broadcast_publish(msg: dict):
 async def _publish_worker():
     while True:
         try:
-            task_data = await publish_queue.get()
-            # Check if task is paused before executing
+            try:
+                task_data = await asyncio.wait_for(publish_queue.get(), timeout=30)
+            except asyncio.TimeoutError:
+                async with async_session() as db:
+                    stuck = (await db.execute(
+                        select(PublishTask).where(PublishTask.status == PublishTaskStatus.queued)
+                    )).scalars().all()
+                    for s in stuck:
+                        await publish_queue.put({"task_id": s.id})
+                continue
             async with async_session() as db:
                 task = await db.get(PublishTask, task_data["task_id"])
                 if task and task.is_paused:
-                    # Re-enqueue paused tasks instead of losing them
                     await asyncio.sleep(30)
                     await publish_queue.put(task_data)
-                    continue  # Skip; will be re-checked on next deque
+                    continue
             await _execute_publish(task_data["task_id"])
         except asyncio.CancelledError:
             break
