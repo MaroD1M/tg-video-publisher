@@ -123,6 +123,7 @@ const { connect: connectWS } = useWebSocket(
           t.elapsed_sec = msg.elapsed_sec || 0
           t.eta_sec = msg.eta_sec || 0
           t.thumbnail_id = msg.thumbnail_id || t.thumbnail_id
+          if (msg.step_logs) (t as any).step_log = msg.step_logs
         }
         startElapsedTimer()
       } else if (msg.type === 'publish_done') {

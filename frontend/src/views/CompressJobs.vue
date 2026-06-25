@@ -125,6 +125,7 @@ const { connect: connectWS } = useWebSocket(
           if (msg.phase) job.phase = msg.phase
           if (msg.step_log) job.step_log = msg.step_log
           if (msg.thumbnail_id) job.thumbnail_id = msg.thumbnail_id
+          if (msg.stderr) (job as any).stderr = msg.stderr
         }
       } else if (msg.type === 'job_done') {
         const job = jobs.value.find(j => j.id === msg.job_id)

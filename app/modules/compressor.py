@@ -346,6 +346,7 @@ async def _run_ffmpeg(
                 last_broadcast = now
                 elapsed = now - start_time
                 eta = (elapsed / (pct / 100) - elapsed) if pct > 0 else 0
+                stderr_full = "".join(stderr_lines) if stderr_lines else ""
                 await broadcast({
                     "type": "progress", "job_id": job_id,
                     "percent": round(pct, 1), "eta_sec": round(eta),
@@ -353,6 +354,7 @@ async def _run_ffmpeg(
                     "speed": round(latest_speed, 1) if latest_speed else 0,
                     "fps": round(latest_fps, 1) if latest_fps else 0,
                     "phase": phase,
+                    "stderr": stderr_full,
                 })
 
     await proc.wait()

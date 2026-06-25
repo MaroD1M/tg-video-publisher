@@ -437,6 +437,20 @@ async def delete_publish_task(task_id: int, db: AsyncSession = Depends(get_db)):
     task = await db.get(PublishTask, task_id)
     if not task:
         raise HTTPException(404, "Task not found")
+    # Clean up associated thumbnail files
+    if task.video_id:
+        from pathlib import Path
+        from app.database.models import Thumbnail
+        thumb_rows = (await db.execute(
+            select(Thumbnail).where(Thumbnail.video_id == task.video_id)
+        )).scalars().all()
+        for t in thumb_rows:
+            try:
+                if t.filepath and Path(t.filepath).exists():
+                    Path(t.filepath).unlink()
+            except Exception:
+                pass
+            await db.delete(t)
     await db.delete(task)
     await db.commit()
     return {"ok": True}

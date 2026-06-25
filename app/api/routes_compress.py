@@ -636,6 +636,14 @@ async def delete_compress_job(job_id: int, db: AsyncSession = Depends(get_db)):
         except Exception:
             pass
         await db.delete(t)
+    # Clean up output file
+    if job.output_path:
+        try:
+            p = Path(job.output_path)
+            if p.exists():
+                p.unlink()
+        except Exception:
+            pass
     await db.delete(job)
     await db.commit()
     return {"ok": True}
@@ -650,6 +658,25 @@ async def batch_delete_compress(status: str = Query(""), db: AsyncSession = Depe
         q = q.where(CompressJob.status == status)
     rows = (await db.execute(q)).scalars().all()
     for row in rows:
+        # Clean up output file
+        if row.output_path:
+            try:
+                p = Path(row.output_path)
+                if p.exists():
+                    p.unlink()
+            except Exception:
+                pass
+        # Clean up associated thumbnails
+        thumb_rows = (await db.execute(
+            select(Thumbnail).where(Thumbnail.video_id == row.video_id)
+        )).scalars().all()
+        for t in thumb_rows:
+            try:
+                if t.filepath and Path(t.filepath).exists():
+                    Path(t.filepath).unlink()
+            except Exception:
+                pass
+            await db.delete(t)
         await db.delete(row)
     await db.commit()
     return {"ok": True, "deleted": len(rows)}
