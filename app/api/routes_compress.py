@@ -51,7 +51,7 @@ async def _broadcast_fn(msg: str):
     except Exception:
         pass
 
-    for ws in active_connections:
+    for ws in list(active_connections):
         try:
             await ws.send_text(msg)
         except Exception:
@@ -61,16 +61,7 @@ async def _broadcast_fn(msg: str):
 async def _compression_worker():
     while True:
         try:
-            try:
-                job_data = await asyncio.wait_for(job_queue.get(), timeout=30)
-            except asyncio.TimeoutError:
-                async with async_session() as db:
-                    stuck = (await db.execute(
-                        select(CompressJob).where(CompressJob.status == JobStatus.queued)
-                    )).scalars().all()
-                    for j in stuck:
-                        await job_queue.put({"job_id": j.id, "video_id": j.video_id})
-                continue
+            job_data = await job_queue.get()
             await _execute_one(job_data)
         except asyncio.CancelledError:
             break
@@ -89,6 +80,8 @@ async def _execute_one(job_data: dict):
         video = await db.get(Video, video_id)
         if not job or not video:
             return
+        if job.status not in (JobStatus.queued, JobStatus.paused):
+            return  # already cancelled, skipped, or re-processed
         job.status = JobStatus.running
         job.started_at = datetime.datetime.utcnow()
         video.status = VideoStatus.compressing
@@ -513,6 +506,7 @@ async def resume_job(job_id: int, db: AsyncSession = Depends(get_db)):
 
     e = pause_events.get(job_id)
     if e:
+        e.clear()
         e.set()
     job.status = JobStatus.running
     await db.commit()

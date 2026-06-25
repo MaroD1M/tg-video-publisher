@@ -23,8 +23,8 @@ export function useChannels() {
     try {
       channelsPromise = fetchChats().then(d => {
         const items = d.items || []
-        channelsCache = items
         channelsPromise = null
+        channelsCache = items
         return items
       })
       channels.value = await channelsPromise

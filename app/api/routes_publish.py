@@ -61,6 +61,7 @@ async def _execute_publish(task_id: int):
     step_logs = []
     video_name = "Unknown"
     channel_name = ""
+    cancel_watcher_task = None
 
     # Load task data
     async with async_session() as db:
@@ -255,7 +256,8 @@ async def _execute_publish(task_id: int):
             "video_name": video_name, "error": str(e)[:200],
         })
     finally:
-        cancel_watcher_task.cancel()
+        if cancel_watcher_task:
+            cancel_watcher_task.cancel()
 
 
 async def enqueue_publish(video_id: int, channel_id: int, channel_name: str = "", schedule_id: int = 0) -> int:

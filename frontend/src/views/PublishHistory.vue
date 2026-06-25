@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, h } from 'vue'
 import { NEmpty, NCard, NDataTable, NTag, NText, NSpin, NInput, NSelect, NSpace, NButton, NDatePicker, NImage, NPopconfirm, useMessage } from 'naive-ui'
-import { fetchLogsWithFilters, fetchChats, retryPublishTask, getThumbnailImage, deletePublishLog } from '@/api/client'
+import { fetchLogsWithFilters, fetchChats, publishNow, getThumbnailImage, deletePublishLog } from '@/api/client'
 import { formatSize } from '@/utils/format'
 import PageHeader from '@/components/shared/PageHeader.vue'
 import PageContainer from '@/components/shared/PageContainer.vue'
@@ -104,9 +104,9 @@ function clearFilters() {
 }
 
 async function doRetryFromHistory(row: any) {
-  if (!row.video_id) return
+  if (!row.video_id || !row.target_chat_id) return
   try {
-    await retryPublishTask(row.id)
+    await publishNow(row.video_id, row.target_chat_id)
     message.success('已重新加入发布队列')
   } catch { message.error('重试失败') }
 }
