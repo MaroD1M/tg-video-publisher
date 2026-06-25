@@ -35,7 +35,6 @@ const pendingVideos = ref<Video[]>([])
 const pendingLoading = ref(false)
 const pendingConfig = ref<Record<number, { preset: string; target_size_mb: number; width: number; height: number }>>({})
 const resCache = ref<Record<number, string>>({})
-const defaultPreset = ref('balanced')
 let compressPreset = 'balanced'
 
 async function initPendingVideos() {
@@ -159,7 +158,6 @@ function thumbUrl(id: number | null) { return id ? getThumbnailImage(id) : '' }
 function formatEta(sec: number) { if (!sec) return ''; const m = Math.floor(sec/60), s = Math.floor(sec%60); return m > 0 ? `剩余 ${m}m${s}s` : `剩余 ${s}s` }
 function formatElapsed(sec: number) { if (!sec) return ''; const h = Math.floor(sec/3600), m = Math.floor((sec%3600)/60), s = Math.floor(sec%60); if (h>0) return `${h}h${m}m${s}s`; return `${m}m${s}s` }
 function statusColor(s: string) { return { running: 'var(--color-purple)', paused: '#faad14', done: 'var(--color-green)', failed: 'var(--color-red)', cancelled: '#aaa', skipped: '#5e9eff' }[s] || '#888' }
-function statusLabel(s: string) { return { running: '压缩中', paused: '已暂停', done: '已完成', failed: '失败', cancelled: '已取消', skipped: '已跳过', queued: '等待中' }[s] || s }
 function presetLabel(p: string) { return { fast: '极速 (H.264)', balanced: '均衡 (H.265)', high_quality: '高画质 (2-pass)' }[p] || p }
 
 async function doCancel(jobId: number) { try { await cancelCompressJob(jobId); message.success('已取消') } catch { message.error('取消失败') } }
@@ -217,7 +215,6 @@ onMounted(async () => {
   try {
     const data = await settingsStore.loadSettings()
     compressPreset = data.compress_preset || 'balanced'
-    defaultPreset.value = compressPreset
   } catch {}
   const ex = route.query.expanded as string
   if (ex) expandedJobId.value = Number(ex)

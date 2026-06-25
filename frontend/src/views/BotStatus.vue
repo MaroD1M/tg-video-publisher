@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, h } from 'vue'
 import { useRouter } from 'vue-router'
-import { NCard, NGrid, NGi, NText, NButton, NDataTable, NTag, NAlert, NSpace, NSpin, NDivider, NModal, NInput, useMessage } from 'naive-ui'
+import { NCard, NGrid, NGi, NText, NButton, NDataTable, NTag, NAlert, NSpace, NSpin, NDivider, NModal, NInput, NEmpty, useMessage } from 'naive-ui'
 import PageHeader from '@/components/shared/PageHeader.vue'
 import PageContainer from '@/components/shared/PageContainer.vue'
 import StatusDot from '@/components/shared/StatusDot.vue'

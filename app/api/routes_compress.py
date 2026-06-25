@@ -595,8 +595,9 @@ async def _auto_add_to_schedule(job_id: int, video_id: int, schedule_id: int):
             await notify_admin(
                 f"📋 已加入发布队列: {video_name}\n计划: {sched.name}"
             )
-    except Exception:
-        pass
+    except Exception as e:
+        import logging
+        logging.getLogger("tgvp.compress").error(f"_auto_add_to_schedule failed: {e}")
 
 
 async def _publish_compressed(job_id: int, video_id: int, channel_id: int):
@@ -609,8 +610,9 @@ async def _publish_compressed(job_id: int, video_id: int, channel_id: int):
             video = await db.get(Video, video_id)
             if video:
                 await enqueue_publish(video_id=video_id, channel_id=channel_id, channel_name=str(channel_id))
-    except Exception:
-        pass
+    except Exception as e:
+        import logging
+        logging.getLogger("tgvp.compress").error(f"_publish_compressed failed: {e}")
 
 
 @router.delete("/compress/{job_id}")

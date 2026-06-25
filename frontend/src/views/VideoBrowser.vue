@@ -7,12 +7,12 @@ import {
   NBreadcrumb, NBreadcrumbItem, NSpin, NProgress,
   NPopconfirm, NPopover, NSelect, useMessage,
 } from 'naive-ui'
-import { fetchVideos, scanDirectory, deleteVideo, publishNow, cancelPublishTask, retryPublishTask } from '@/api/client'
+import { fetchVideos, scanDirectory, deleteVideo, publishNow, cancelPublishTask } from '@/api/client'
 import { useSettingsStore } from '@/stores/settings'
 import { useTaskStore } from '@/stores/tasks'
 import { useWebSocket } from '@/composables/useWebSocket'
 import { useChannels } from '@/composables/useChannels'
-import { formatSize, formatDuration, formatChannelLabel } from '@/utils/format'
+import { formatSize, formatDuration } from '@/utils/format'
 import type { Video } from '@/types'
 import PageHeader from '@/components/shared/PageHeader.vue'
 import PageContainer from '@/components/shared/PageContainer.vue'
@@ -150,7 +150,7 @@ const columns = [
   { title: '文件名', key: 'filename', ellipsis: { tooltip: true }, sorter: true },
   { title: '大小', key: 'size_bytes', width: 100, render: (r: Video) => formatSize(r.size_bytes), sorter: true },
   { title: '时长', key: 'duration_sec', width: 90, render: (r: Video) => formatDuration(r.duration_sec || 0), sorter: true },
-  { title: '分辨率', key: 'resolution', width: 110, render: (r: Video) => r.width ? `${r.width}x${r.height}` : '-', sorter: true },
+  { title: '分辨率', key: 'resolution', width: 110, render: (r: Video) => r.width ? `${r.width}x${r.height}` : '-' },
   {
     title: '状态', key: 'status', width: 110,
     render: (r: Video) => {
@@ -185,9 +185,6 @@ const { connect: connectWS } = useWebSocket(
 
 async function cancelPublish(taskId: number) {
   try { await cancelPublishTask(taskId) } catch { message.error('取消失败') }
-}
-async function retryPublish(taskId: number) {
-  try { await retryPublishTask(taskId); message.success('已重新加入队列') } catch { message.error('重试失败') }
 }
 
 onMounted(async () => {
@@ -259,7 +256,7 @@ const publishTasks = computed(() => taskStore.publishTasks)
         :max-height="'calc(100vh - 360px)'"
         virtual-scroll
         style="margin-bottom: 8px"
-        @update:sorter="(s: any) => { if(s){sortKey=s.key;sortDir=s.order==='ascend'?'asc':'desc'} else {sortKey='';sortDir='asc'} }"
+        @update:sorter="(s: any) => { if(s){sortKey=s.columnKey;sortDir=s.order==='ascend'?'asc':'desc'} else {sortKey='';sortDir='asc'} }"
       />
     </n-spin>
 

@@ -19,7 +19,7 @@ async def _get_chat_name(chat_id, db: AsyncSession) -> str:
     if chat_id is None:
         return "-"
     try:
-        tc = await db.get(TargetChat, chat_id)
+        tc = (await db.execute(select(TargetChat).where(TargetChat.chat_id == chat_id))).scalar_one_or_none()
         return tc.chat_name if tc else str(chat_id)
     except Exception:
         return str(chat_id) if chat_id else "-"
@@ -29,7 +29,7 @@ async def _get_chat_alias(chat_id, db: AsyncSession) -> str | None:
     if chat_id is None:
         return None
     try:
-        tc = await db.get(TargetChat, chat_id)
+        tc = (await db.execute(select(TargetChat).where(TargetChat.chat_id == chat_id))).scalar_one_or_none()
         return tc.alias if tc else None
     except Exception:
         return None

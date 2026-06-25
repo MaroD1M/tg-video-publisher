@@ -155,7 +155,9 @@ async def _save_chat(info: dict):
     from sqlalchemy import select
 
     async with async_session() as db:
-        existing = await db.get(TargetChat, info["chat_id"])
+        existing = (await db.execute(
+            select(TargetChat).where(TargetChat.chat_id == info["chat_id"])
+        )).scalar_one_or_none()
         if not existing:
             db.add(TargetChat(
                 chat_id=info["chat_id"],

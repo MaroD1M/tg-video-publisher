@@ -2,8 +2,8 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import {
-  NCard, NProgress, NTag, NText, NEmpty, NSpace, NButton, NImage,
-  NPopconfirm, NDivider, NGrid, NGi, useMessage,
+  NCard, NProgress, NText, NEmpty, NSpace, NButton, NImage,
+  NPopconfirm, useMessage,
 } from 'naive-ui'
 import {
   fetchPublishTasks, cancelPublishTask, retryPublishTask, getThumbnailImage,
@@ -12,7 +12,7 @@ import {
 } from '@/api/client'
 import { useWebSocket } from '@/composables/useWebSocket'
 import { useChannels } from '@/composables/useChannels'
-import { formatChannelLabel, formatElapsed } from '@/utils/format'
+import { formatElapsed } from '@/utils/format'
 import type { Video } from '@/types'
 import PageHeader from '@/components/shared/PageHeader.vue'
 import PageContainer from '@/components/shared/PageContainer.vue'
