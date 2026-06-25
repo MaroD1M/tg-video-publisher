@@ -360,8 +360,8 @@ onMounted(async () => {
               <n-text depth="3" style="font-size:11px;white-space:pre-wrap;font-family:monospace;word-break:break-all;max-height:200px;overflow-y:auto;display:block">{{ (job as any).stderr || job.error || '暂无详情' }}</n-text>
               <n-space v-if="job.status==='failed'||job.status==='skipped'||job.status==='cancelled'" :size="6" style="margin-top:6px" @click.stop>
                 <n-text depth="3" style="font-size:10px">重试参数:</n-text>
-                <n-select v-model:value="retryConfig[job.id]?.preset" size="tiny" style="width:110px" :options="[{label:'极速 H.264',value:'fast'},{label:'均衡 H.265',value:'balanced'},{label:'高画质',value:'high_quality'}]" @click.stop />
-                <n-input-number v-model:value="retryConfig[job.id]?.target_size_mb" size="tiny" :min="10" :max="10000" style="width:70px" @click.stop /><n-text depth="3" style="font-size:10px">MB</n-text>
+                <n-select :value="retryConfig[job.id]?.preset" @update:value="(val: string) => { if (!retryConfig[job.id]) initRetryConfig(job); retryConfig[job.id].preset = val }" size="tiny" style="width:110px" :options="[{label:'极速 H.264',value:'fast'},{label:'均衡 H.265',value:'balanced'},{label:'高画质',value:'high_quality'}]" @click.stop />
+                <n-input-number :value="retryConfig[job.id]?.target_size_mb" @update:value="(val: number | null) => { if (!retryConfig[job.id]) initRetryConfig(job); retryConfig[job.id].target_size_mb = val ?? 500 }" size="tiny" :min="10" :max="10000" style="width:70px" @click.stop /><n-text depth="3" style="font-size:10px">MB</n-text>
               </n-space>
             </div>
           </div>
